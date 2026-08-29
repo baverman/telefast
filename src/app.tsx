@@ -99,6 +99,104 @@ function codeDeliveryLabel(sentCode: SentCode) {
   }
 }
 
+const avatarUrls = new Map<string, string>()
+const avatarRequests = new Map<string, Promise<string>>()
+let avatarCacheGeneration = 0
+
+function clearAvatarCache() {
+  avatarCacheGeneration += 1
+  avatarUrls.forEach((url) => URL.revokeObjectURL(url))
+  avatarUrls.clear()
+  avatarRequests.clear()
+}
+
+function requestAvatar(telegram: TelefastClient, peer: Dialog['peer']) {
+  const photo = peer.photo
+  if (!photo) return Promise.resolve('')
+
+  const key = photo.small.uniqueFileId
+  const cached = avatarUrls.get(key)
+  if (cached) return Promise.resolve(cached)
+
+  const pending = avatarRequests.get(key)
+  if (pending) return pending
+
+  const requestGeneration = avatarCacheGeneration
+  const request = telegram
+    .downloadAsBuffer(photo.small)
+    .then((bytes) => {
+      if (requestGeneration !== avatarCacheGeneration) return ''
+      const url = URL.createObjectURL(new Blob([Uint8Array.from(bytes)], { type: 'image/jpeg' }))
+      avatarUrls.set(key, url)
+      avatarRequests.delete(key)
+      return url
+    })
+    .catch((error) => {
+      avatarRequests.delete(key)
+      throw error
+    })
+  avatarRequests.set(key, request)
+  return request
+}
+
+function Avatar({
+  peer,
+  telegram,
+  className,
+}: {
+  peer: Dialog['peer']
+  telegram: TelefastClient | null
+  className: string
+}) {
+  const hostRef = useRef<HTMLSpanElement | null>(null)
+  const photoKey = peer.photo?.small.uniqueFileId ?? ''
+  const [source, setSource] = useState(() => avatarUrls.get(photoKey) ?? '')
+
+  useEffect(() => {
+    setSource(avatarUrls.get(photoKey) ?? '')
+    if (!telegram || !photoKey || !peer.photo) return
+
+    let active = true
+    const load = () => {
+      void requestAvatar(telegram, peer)
+        .then((url) => {
+          if (active) setSource(url)
+        })
+        .catch((error) => console.warn('[Telefast] Failed to load avatar', error))
+    }
+
+    const host = hostRef.current
+    if (!host || typeof IntersectionObserver === 'undefined') {
+      load()
+      return () => {
+        active = false
+      }
+    }
+
+    const observer = new IntersectionObserver((entries) => {
+      if (!entries.some((entry) => entry.isIntersecting)) return
+      observer.disconnect()
+      load()
+    }, { rootMargin: '160px' })
+    observer.observe(host)
+
+    return () => {
+      active = false
+      observer.disconnect()
+    }
+  }, [photoKey, telegram, peer])
+
+  return (
+    <span ref={hostRef} class={`${className} overflow-hidden`} aria-hidden="true">
+      {source ? (
+        <img class="size-full object-cover" src={source} alt="" decoding="async" />
+      ) : (
+        initials(peer.displayName)
+      )}
+    </span>
+  )
+}
+
 export function App() {
   const location = useLocation()
   const selectedId = chatIdFromPath(location.path)
@@ -500,6 +598,7 @@ export function App() {
     } finally {
       await connection.destroy()
       connectionRef.current = null
+      clearAvatarCache()
       selectedRef.current = null
       setDialogs([])
       setMessages([])
@@ -668,9 +767,11 @@ export function App() {
                 href={`/chat/${encodeURIComponent(id)}`}
                 class={`flex w-full items-center gap-3 rounded-xl p-3 text-left transition-colors ${selectedId === id ? 'bg-sky-500/15' : 'hover:bg-zinc-800/70'}`}
               >
-                <span class="grid size-11 shrink-0 place-items-center rounded-full bg-gradient-to-br from-sky-500 to-indigo-500 text-sm font-semibold text-white">
-                  {initials(title)}
-                </span>
+                <Avatar
+                  peer={dialog.peer}
+                  telegram={connectionRef.current?.client ?? null}
+                  className="grid size-11 shrink-0 place-items-center rounded-full bg-gradient-to-br from-sky-500 to-indigo-500 text-sm font-semibold text-white"
+                />
                 <span class="min-w-0 flex-1">
                   <span class="flex items-baseline gap-2">
                     <strong class="min-w-0 flex-1 truncate text-sm font-medium">{title}</strong>
@@ -707,9 +808,11 @@ export function App() {
               >
                 ←
               </a>
-              <span class="grid size-9 place-items-center rounded-full bg-gradient-to-br from-sky-500 to-indigo-500 text-xs font-semibold">
-                {initials(selected.peer.displayName)}
-              </span>
+              <Avatar
+                peer={selected.peer}
+                telegram={connectionRef.current?.client ?? null}
+                className="grid size-9 shrink-0 place-items-center rounded-full bg-gradient-to-br from-sky-500 to-indigo-500 text-xs font-semibold"
+              />
               <strong class="truncate text-sm font-medium">{selected.peer.displayName}</strong>
             </header>
 
