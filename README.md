@@ -1,17 +1,17 @@
 # Telefast
 
-A small, frontend-only Telegram client focused on private text chats.
+A small, frontend-only Telegram client focused on private and group text chats.
 
 ## Current scope
 
 - Phone-number authentication
 - Telegram login codes and two-step verification
 - Persistent IndexedDB sessions
-- Private chat list and unread counts
+- Private and group chat list with unread counts
 - URL-based chat navigation with browser history and deep links
 - Paginated message history
 - Real-time incoming messages
-- Opt-in desktop notifications for unmuted private chats
+- Opt-in desktop notifications for unmuted private and group chats
 - Sending text messages
 
 ## Run locally

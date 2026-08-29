@@ -62,8 +62,22 @@ function messageText(message?: Message | null) {
   return message.text || (message.media ? 'Attachment' : '')
 }
 
-function isPrivateDialog(dialog: Dialog) {
-  return dialog.peer.type === 'user'
+function isGroupPeer(peer: Dialog['peer']) {
+  return peer.type === 'chat' && peer.isGroup
+}
+
+function isSupportedPeer(peer: Dialog['peer']) {
+  return peer.type === 'user' || isGroupPeer(peer)
+}
+
+function isSupportedDialog(dialog: Dialog) {
+  return isSupportedPeer(dialog.peer)
+}
+
+function messagePreview(message?: Message | null, includeSender = false) {
+  const text = messageText(message)
+  if (!message || !text || !includeSender || message.isOutgoing) return text
+  return `${message.sender.displayName}: ${text}`
 }
 
 function codeDeliveryLabel(sentCode: SentCode) {
@@ -185,7 +199,7 @@ export function App() {
 
     const nextDialogs: Dialog[] = []
     for await (const dialog of telegram.iterDialogs({ limit: 100 })) {
-      if (isPrivateDialog(dialog)) nextDialogs.push(dialog)
+      if (isSupportedDialog(dialog)) nextDialogs.push(dialog)
     }
     setDialogs(nextDialogs)
 
@@ -199,7 +213,7 @@ export function App() {
 
   function attachUpdates(telegram: TelefastClient) {
     telegram.onNewMessage.add((message) => {
-      if (message.chat.type !== 'user') return
+      if (!isSupportedPeer(message.chat)) return
 
       void (async () => {
         try {
@@ -225,7 +239,7 @@ export function App() {
 
           if (shouldNotify) {
             const notification = new Notification(targetDialog.peer.displayName, {
-              body: messageText(message) || 'New message',
+              body: messagePreview(message, isGroupPeer(targetDialog.peer)) || 'New message',
               tag: `telefast-${message.chat.id}`,
             })
             notification.onclick = () => {
@@ -337,7 +351,7 @@ export function App() {
     void telegram
       .getPeerDialogs([peerId])
       .then(([resolved]) => {
-        if (resolved && isPrivateDialog(resolved)) {
+        if (resolved && isSupportedDialog(resolved)) {
           setDialogs((current) =>
             current.some((item) => dialogId(item) === routedId) ? current : [...current, resolved],
           )
@@ -664,7 +678,7 @@ export function App() {
                   </span>
                   <span class="mt-1 flex items-center gap-2">
                     <span class="min-w-0 flex-1 truncate text-xs text-zinc-500">
-                      {messageText(dialog.lastMessage)}
+                      {messagePreview(dialog.lastMessage, isGroupPeer(dialog.peer))}
                     </span>
                     {dialog.unreadCount > 0 && (
                       <span class="min-w-5 rounded-full bg-sky-500 px-1.5 py-0.5 text-center text-[10px] font-bold text-white">
@@ -677,7 +691,7 @@ export function App() {
             )
           })}
           {!visibleDialogs.length && (
-            <p class="px-4 py-8 text-center text-sm text-zinc-500">No private chats found.</p>
+            <p class="px-4 py-8 text-center text-sm text-zinc-500">No chats found.</p>
           )}
         </div>
       </aside>
@@ -718,6 +732,9 @@ export function App() {
                     key={message.id}
                     class={`message-bubble ${message.isOutgoing ? 'message-out' : 'message-in'}`}
                   >
+                    {isGroupPeer(selected.peer) && !message.isOutgoing && (
+                      <p class="mb-1 text-xs font-medium text-sky-300">{message.sender.displayName}</p>
+                    )}
                     <p class="whitespace-pre-wrap break-words text-[15px] leading-5">
                       {messageText(message) || 'Unsupported message'}
                     </p>
