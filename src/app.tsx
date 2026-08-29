@@ -59,7 +59,11 @@ function timeLabel(date?: Date | null) {
 
 function messageText(message?: Message | null) {
   if (!message) return ''
-  return message.text || (message.media ? 'Attachment' : '')
+  if (message.text) return message.text
+  if (message.media?.type === 'sticker') {
+    return `${message.media.emoji ? `${message.media.emoji} ` : ''}Sticker`
+  }
+  return message.media ? 'Attachment' : ''
 }
 
 function isGroupPeer(peer: Dialog['peer']) {
@@ -194,6 +198,95 @@ function Avatar({
         initials(peer.displayName)
       )}
     </span>
+  )
+}
+
+type StickerMedia = Extract<NonNullable<Message['media']>, { type: 'sticker' }>
+
+function StickerView({ sticker, telegram }: { sticker: StickerMedia; telegram: TelefastClient | null }) {
+  const hostRef = useRef<HTMLDivElement | null>(null)
+  const [source, setSource] = useState('')
+  const [failed, setFailed] = useState(false)
+
+  useEffect(() => {
+    if (!telegram) return
+
+    let active = true
+    let objectUrl = ''
+    let destroyAnimation = () => {}
+
+    const load = async () => {
+      try {
+        const bytes = await telegram.downloadAsBuffer(sticker)
+        if (!active) return
+
+        if (sticker.sourceType === 'static' || sticker.sourceType === 'video') {
+          const mimeType = sticker.sourceType === 'video' ? 'video/webm' : 'image/webp'
+          objectUrl = URL.createObjectURL(new Blob([Uint8Array.from(bytes)], { type: mimeType }))
+          setSource(objectUrl)
+          return
+        }
+
+        const compressed = new Blob([Uint8Array.from(bytes)]).stream()
+        const animationData = await new Response(
+          compressed.pipeThrough(new DecompressionStream('gzip')),
+        ).json()
+        const { default: lottie } = await import('lottie-web/build/player/lottie_light')
+        if (!active || !hostRef.current) return
+
+        const animation = lottie.loadAnimation({
+          container: hostRef.current,
+          renderer: 'svg',
+          loop: true,
+          autoplay: true,
+          animationData,
+        })
+        destroyAnimation = () => animation.destroy()
+      } catch (error) {
+        if (active) {
+          console.warn('[Telefast] Failed to load sticker', error)
+          setFailed(true)
+        }
+      }
+    }
+
+    const host = hostRef.current
+    if (!host || typeof IntersectionObserver === 'undefined') {
+      void load()
+    } else {
+      const observer = new IntersectionObserver((entries) => {
+        if (!entries.some((entry) => entry.isIntersecting)) return
+        observer.disconnect()
+        void load()
+      }, { rootMargin: '240px' })
+      observer.observe(host)
+      destroyAnimation = () => observer.disconnect()
+    }
+
+    return () => {
+      active = false
+      destroyAnimation()
+      if (objectUrl) URL.revokeObjectURL(objectUrl)
+    }
+  }, [sticker, telegram])
+
+  const label = `${sticker.emoji ? `${sticker.emoji} ` : ''}Sticker`
+
+  return (
+    <div
+      ref={hostRef}
+      class="grid aspect-square w-48 max-w-[60vw] place-items-center overflow-hidden md:w-60"
+      role="img"
+      aria-label={label}
+    >
+      {sticker.sourceType === 'static' && source && (
+        <img class="size-full object-contain" src={source} alt={label} decoding="async" />
+      )}
+      {sticker.sourceType === 'video' && source && (
+        <video class="size-full object-contain" src={source} autoPlay loop muted playsInline aria-label={label} />
+      )}
+      {failed && <span class="text-sm text-zinc-400">{label}</span>}
+    </div>
   )
 }
 
@@ -833,14 +926,24 @@ export function App() {
                 {messagesForSelected.map((message) => (
                   <article
                     key={message.id}
-                    class={`message-bubble ${message.isOutgoing ? 'message-out' : 'message-in'}`}
+                    class={message.media?.type === 'sticker'
+                      ? `sticker-message ${message.isOutgoing ? 'sticker-out' : 'sticker-in'}`
+                      : `message-bubble ${message.isOutgoing ? 'message-out' : 'message-in'}`
+                    }
                   >
                     {isGroupPeer(selected.peer) && !message.isOutgoing && (
                       <p class="mb-1 text-xs font-medium text-sky-300">{message.sender.displayName}</p>
                     )}
-                    <p class="whitespace-pre-wrap break-words text-[15px] leading-5">
-                      {messageText(message) || 'Unsupported message'}
-                    </p>
+                    {message.media?.type === 'sticker' ? (
+                      <StickerView
+                        sticker={message.media}
+                        telegram={connectionRef.current?.client ?? null}
+                      />
+                    ) : (
+                      <p class="whitespace-pre-wrap break-words text-[15px] leading-5">
+                        {messageText(message) || 'Unsupported message'}
+                      </p>
+                    )}
                     <time class="mt-1 block text-right text-[10px] text-zinc-400/80">
                       {timeLabel(message.date)}
                     </time>

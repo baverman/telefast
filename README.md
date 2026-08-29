@@ -14,6 +14,7 @@ A small, frontend-only Telegram client focused on private and group text chats.
 - Real-time incoming messages
 - Opt-in desktop notifications for unmuted private and group chats
 - Sending text messages
+- Static, animated, and video sticker display
 
 ## Run locally
 

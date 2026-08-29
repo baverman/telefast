@@ -121,6 +121,19 @@ button:disabled {
   background: #075985;
 }
 
+.sticker-message {
+  width: fit-content;
+  max-width: 78%;
+}
+
+.sticker-in {
+  align-self: flex-start;
+}
+
+.sticker-out {
+  align-self: flex-end;
+}
+
 .loader {
   width: 1rem;
   height: 1rem;
