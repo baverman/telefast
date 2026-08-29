@@ -1,0 +1,37 @@
+# Telefast
+
+A small, frontend-only Telegram client focused on private text chats.
+
+## Current scope
+
+- Phone-number authentication
+- Telegram login codes and two-step verification
+- Persistent IndexedDB sessions
+- Private chat list and unread counts
+- URL-based chat navigation with browser history and deep links
+- Paginated message history
+- Real-time incoming messages
+- Opt-in desktop notifications for unmuted private chats
+- Sending text messages
+
+## Run locally
+
+1. Create a Telegram application at <https://my.telegram.org/apps>.
+2. Install dependencies and start Vite:
+
+   ```sh
+   pnpm install
+   pnpm dev
+   ```
+
+3. Open the shown local URL. Enter the application's API ID and API hash, then your phone number.
+
+The API credentials are stored in local storage. mtcute stores the Telegram session in IndexedDB and runs MTProto in a Web Worker. Do not use this client on an untrusted device or host.
+
+## Build
+
+```sh
+pnpm build
+```
+
+Deployments must route `/login` and `/chat/*` requests to `index.html` so deep links can load the SPA.

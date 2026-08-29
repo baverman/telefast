@@ -1,0 +1,29 @@
+{
+  "name": "telefast",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "lint": "eslint .",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@mtcute/web": "^0.32.0",
+    "preact": "latest",
+    "preact-iso": "^2.12.2"
+  },
+  "devDependencies": {
+    "@eslint/js": "latest",
+    "@preact/preset-vite": "latest",
+    "@tailwindcss/vite": "latest",
+    "@types/node": "latest",
+    "eslint": "latest",
+    "globals": "latest",
+    "tailwindcss": "latest",
+    "typescript": "~5.9.3",
+    "typescript-eslint": "latest",
+    "vite": "latest"
+  }
+}
