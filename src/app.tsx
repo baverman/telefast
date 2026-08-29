@@ -1,3 +1,4 @@
+import type { ComponentChildren } from 'preact'
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks'
 import type { Dialog, Message, SentCode } from '@mtcute/web'
 import { useLocation } from 'preact-iso'
@@ -64,6 +65,66 @@ function messageText(message?: Message | null) {
     return `${message.media.emoji ? `${message.media.emoji} ` : ''}Sticker`
   }
   return message.media ? 'Attachment' : ''
+}
+
+type TelegramMessageEntity = Message['entities'][number]
+
+function normalizeWebUrl(value: string) {
+  const candidate = /^[a-z][a-z\d+.-]*:/i.test(value) ? value : `https://${value}`
+  try {
+    const url = new URL(candidate)
+    return url.protocol === 'http:' || url.protocol === 'https:' ? url.href : ''
+  } catch {
+    return ''
+  }
+}
+
+function entityHref(entity: TelegramMessageEntity, text: string) {
+  if (entity.is('url')) return normalizeWebUrl(text)
+  if (entity.is('text_link')) {
+    const webUrl = normalizeWebUrl(entity.params.url)
+    if (webUrl) return webUrl
+    try {
+      const url = new URL(entity.params.url)
+      return ['tg:', 'mailto:', 'tel:'].includes(url.protocol) ? url.href : ''
+    } catch {
+      return ''
+    }
+  }
+  if (entity.is('email')) return `mailto:${text}`
+  if (entity.is('phone_number')) return `tel:${text.replaceAll(/[^\d+]/g, '')}`
+  return ''
+}
+
+function MessageText({ message }: { message: Message }) {
+  const parts: ComponentChildren[] = []
+  let cursor = 0
+  const entities = [...message.entities].sort((left, right) => left.offset - right.offset)
+
+  entities.forEach((entity) => {
+    if (entity.offset < cursor) return
+    const text = message.text.slice(entity.offset, entity.offset + entity.length)
+    const href = entityHref(entity, text)
+    if (!href) return
+
+    if (entity.offset > cursor) parts.push(message.text.slice(cursor, entity.offset))
+    const opensNewTab = href.startsWith('http:') || href.startsWith('https:')
+    parts.push(
+      <a
+        key={`${entity.offset}-${entity.length}`}
+        class="text-sky-300 underline decoration-sky-400/60 underline-offset-2 hover:text-sky-200"
+        href={href}
+        target={opensNewTab ? '_blank' : undefined}
+        rel={opensNewTab ? 'noopener noreferrer' : undefined}
+      >
+        {text}
+      </a>,
+    )
+    cursor = entity.offset + entity.length
+  })
+
+  if (cursor < message.text.length) parts.push(message.text.slice(cursor))
+  return <>{parts}</>
 }
 
 function isGroupPeer(peer: Dialog['peer']) {
@@ -941,7 +1002,7 @@ export function App() {
                       />
                     ) : (
                       <p class="whitespace-pre-wrap break-words text-[15px] leading-5">
-                        {messageText(message) || 'Unsupported message'}
+                        {message.text ? <MessageText message={message} /> : 'Unsupported message'}
                       </p>
                     )}
                     <time class="mt-1 block text-right text-[10px] text-zinc-400/80">
