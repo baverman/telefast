@@ -195,3 +195,26 @@ export function useSendReaction(peerId: string) {
     },
   })
 }
+
+export function useBotCommands(peerId: string) {
+  const { client, status } = useTelegram()
+  const queryClient = useQueryClient()
+  return useQuery({
+    queryKey: ['telegram', 'bot-commands', peerId],
+    queryFn: async () => {
+      const dialog = await resolveDialog(client!, queryClient, peerId)
+      if (dialog.peer.type === 'chat') {
+        const full = await client!.getFullChat(dialog.peer)
+        return full.botInfo.flatMap((bot) => bot.commands.map((command) => ({ name: command.command, description: command.description })))
+      }
+      if (dialog.peer.type === 'user' && dialog.peer.isBot) {
+        const full = await client!.getFullUser(dialog.peer)
+        return (full.full.botInfo?.commands ?? []).map((command) => ({ name: command.command, description: command.description }))
+      }
+      return []
+    },
+    enabled: status === 'authenticated' && Boolean(client),
+    staleTime: 5 * 60_000,
+    retry: 0,
+  })
+}
