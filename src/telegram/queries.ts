@@ -3,7 +3,7 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tansta
 import { useMemo } from 'preact/hooks'
 import { useTelegram } from './telegram-provider'
 import { dialogId, isSupportedDialog } from './model'
-import { appendMessage, cachedDialog, telegramKeys, type HistoryPage, type StickerData } from './query-data'
+import { appendMessage, cachedDialog, telegramKeys, upsertMessage, type HistoryPage, type StickerData } from './query-data'
 
 async function loadDialogs(client: NonNullable<ReturnType<typeof useTelegram>['client']>) {
   const dialogs: Dialog[] = []
@@ -174,6 +174,24 @@ export function useSendSticker(peerId: string) {
         recent: [sticker, ...current.recent.filter((item) => item.uniqueFileId !== sticker.uniqueFileId)],
       } : current)
       void queryClient.invalidateQueries({ queryKey: telegramKeys.dialogs() })
+    },
+  })
+}
+
+export function useSendReaction(peerId: string) {
+  const { client } = useTelegram()
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ messageId, emoji, remove }: { messageId: number; emoji: string; remove: boolean }) => {
+      const dialog = await resolveDialog(client!, queryClient, peerId)
+      return client!.sendReaction({
+        chatId: dialog.peer,
+        message: messageId,
+        emoji: remove ? null : emoji,
+      })
+    },
+    onSuccess: (updated) => {
+      if (updated) upsertMessage(queryClient, peerId, updated)
     },
   })
 }

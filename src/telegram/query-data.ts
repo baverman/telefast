@@ -32,6 +32,23 @@ export function appendMessage(queryClient: QueryClient, peerId: string, message:
   )
 }
 
+export function upsertMessage(queryClient: QueryClient, peerId: string, message: Message) {
+  queryClient.setQueryData<InfiniteData<HistoryPage, HistoryPage['next']>>(
+    telegramKeys.messages(peerId),
+    (current) => {
+      if (!current) return current
+      const pages = current.pages.map((page) => ({
+        ...page,
+        messages: page.messages.map((item) => item.id === message.id ? message : item),
+      }))
+      if (!pages.some((page) => page.messages.some((item) => item.id === message.id))) {
+        pages[0] = { ...pages[0], messages: [...pages[0].messages, message] }
+      }
+      return { ...current, pages }
+    },
+  )
+}
+
 export function cachedDialog(queryClient: QueryClient, peerId: string) {
   return queryClient.getQueryData<Dialog[]>(telegramKeys.dialogs())?.find((dialog) => String(dialog.peer.id) === peerId)
 }

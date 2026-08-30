@@ -4,6 +4,7 @@ import { useTelegram, isGroupPeer } from '../telegram/telegram-provider'
 import { useMessages, useSendText } from '../telegram/queries'
 import { StickerView, timeLabel } from './media'
 import { MessageContent } from './message-content'
+import { ReactionBar } from './reaction-bar'
 
 export function MessageList({ peerId, dialog }: { peerId: string; dialog: Dialog }) {
   const { client } = useTelegram()
@@ -39,9 +40,9 @@ export function MessageList({ peerId, dialog }: { peerId: string; dialog: Dialog
             key={message.id}
             class={message.isService
               ? 'message-service'
-              : message.media?.type === 'sticker'
-                ? `sticker-message ${message.isOutgoing ? 'sticker-out' : 'sticker-in'}`
-                : `message-bubble ${message.isOutgoing ? 'message-out' : 'message-in'}`
+              : `group ${message.media?.type === 'sticker'
+                  ? `sticker-message ${message.isOutgoing ? 'sticker-out' : 'sticker-in'}`
+                  : `message-bubble ${message.isOutgoing ? 'message-out' : 'message-in'}`}`
             }
           >
             {isGroupPeer(dialog.peer) && !message.isOutgoing && (
@@ -53,6 +54,7 @@ export function MessageList({ peerId, dialog }: { peerId: string; dialog: Dialog
               <MessageContent message={message} telegram={client} onCommand={(command) => sendCommand.mutate(command)} />
             )}
             <time class="mt-1 block text-right text-[10px] text-zinc-400/80">{timeLabel(message.date)}</time>
+            {!message.isService && <ReactionBar message={message} peerId={peerId} />}
           </article>
         ))}
         <div ref={endRef} />
