@@ -61,7 +61,9 @@ export function ChatSidebar({ selectedPeerId }: { selectedPeerId?: string }) {
                     {messagePreview(dialog.lastMessage, isGroupPeer(dialog.peer))}
                   </span>
                   {dialog.unreadCount > 0 && (
-                    <span class="min-w-5 rounded-full bg-sky-500 px-1.5 py-0.5 text-center text-[10px] font-bold text-white">{dialog.unreadCount}</span>
+                    <span class={`min-w-5 rounded-full px-1.5 py-0.5 text-center text-[10px] font-bold ${dialog.isMuted ? 'bg-zinc-800 text-zinc-400' : 'bg-sky-500 text-white'}`} title={dialog.isMuted ? 'Muted chat' : undefined}>
+                      {dialog.unreadCount}
+                    </span>
                   )}
                 </span>
               </span>
