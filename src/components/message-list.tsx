@@ -1,10 +1,10 @@
-import { useEffect, useRef } from 'preact/hooks'
-import type { Dialog } from '@mtcute/web'
+import { useEffect, useRef, useState } from 'preact/hooks'
+import type { Dialog, Message } from '@mtcute/web'
 import { useTelegram, isGroupPeer } from '../telegram/telegram-provider'
 import { useMessages, useSendText } from '../telegram/queries'
 import { StickerView, timeLabel } from './media'
 import { MessageContent } from './message-content'
-import { ReactionBar } from './reaction-bar'
+import { ReactionBar, ReactionContextMenu } from './reaction-bar'
 
 export function MessageList({ peerId, dialog }: { peerId: string; dialog: Dialog }) {
   const { client } = useTelegram()
@@ -12,6 +12,7 @@ export function MessageList({ peerId, dialog }: { peerId: string; dialog: Dialog
   const sendCommand = useSendText(peerId)
   const endRef = useRef<HTMLDivElement | null>(null)
   const shouldScrollBottom = useRef(true)
+  const [contextMenu, setContextMenu] = useState<{ message: Message; x: number; y: number } | null>(null)
 
   useEffect(() => {
     if (shouldScrollBottom.current) endRef.current?.scrollIntoView({ block: 'end' })
@@ -38,6 +39,11 @@ export function MessageList({ peerId, dialog }: { peerId: string; dialog: Dialog
         {history.messages.map((message) => (
           <article
             key={message.id}
+            onContextMenu={(event) => {
+              if (window.getSelection()?.toString()) return
+              event.preventDefault()
+              setContextMenu({ message, x: event.clientX, y: event.clientY })
+            }}
             class={message.isService
               ? 'message-service'
               : `group ${message.media?.type === 'sticker'
@@ -53,10 +59,21 @@ export function MessageList({ peerId, dialog }: { peerId: string; dialog: Dialog
             ) : (
               <MessageContent message={message} telegram={client} onCommand={(command) => sendCommand.mutate(command)} />
             )}
-            <time class="mt-1 block text-right text-[10px] text-zinc-400/80">{timeLabel(message.date)}</time>
-            {!message.isService && <ReactionBar message={message} peerId={peerId} />}
+            <div class="mt-1 flex flex-wrap items-center gap-1">
+              {!message.isService && <ReactionBar message={message} peerId={peerId} />}
+              <time class="ml-auto text-[10px] text-zinc-400/80">{timeLabel(message.date)}</time>
+            </div>
           </article>
         ))}
+        {contextMenu && (
+          <ReactionContextMenu
+            message={contextMenu.message}
+            peerId={peerId}
+            x={contextMenu.x}
+            y={contextMenu.y}
+            onClose={() => setContextMenu(null)}
+          />
+        )}
         <div ref={endRef} />
       </div>
     </div>
