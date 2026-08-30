@@ -12,8 +12,8 @@ export function MessageList({ peerId, dialog, threadId }: { peerId: string; dial
   const location = useLocation()
   const history = useMessages(peerId, threadId)
   const sendCommand = useSendText(peerId, threadId)
-  const endRef = useRef<HTMLDivElement | null>(null)
-  const shouldScrollBottom = useRef(true)
+  const containerRef = useRef<HTMLDivElement | null>(null)
+  const previousCountRef = useRef(0)
 
   async function openComments(post: Message) {
     if (!client) return
@@ -28,19 +28,34 @@ export function MessageList({ peerId, dialog, threadId }: { peerId: string; dial
   const [contextMenu, setContextMenu] = useState<{ message: Message; x: number; y: number } | null>(null)
 
   useEffect(() => {
-    if (shouldScrollBottom.current) endRef.current?.scrollIntoView({ block: 'end' })
-    shouldScrollBottom.current = true
+    previousCountRef.current = 0
+  }, [peerId, threadId])
+
+  useEffect(() => {
+    const container = containerRef.current
+    const count = history.messages.length
+    const previousCount = previousCountRef.current
+    const isInitial = previousCount === 0 && count > 0
+    const grew = count > previousCount
+    const isNewOutgoing = grew && history.messages[count - 1]?.isOutgoing === true
+    const nearBottom = container
+      ? container.scrollHeight - container.scrollTop - container.clientHeight < 120
+      : true
+    previousCountRef.current = count
+
+    if (isInitial || isNewOutgoing || nearBottom) {
+      if (container) container.scrollTop = container.scrollHeight
+    }
   }, [history.messages])
 
   return (
-    <div class="min-h-0 flex-1 overflow-y-auto px-4 py-6 md:px-8">
+    <div ref={containerRef} class="min-h-0 flex-1 overflow-y-auto px-4 py-6 md:px-8">
       <div class="mx-auto flex min-h-full max-w-3xl flex-col justify-end gap-2">
         {history.hasNextPage && (
           <button
             class="mx-auto mb-4 rounded-full border border-zinc-700 bg-zinc-900 px-4 py-2 text-xs text-zinc-300 hover:bg-zinc-800 disabled:opacity-50"
             disabled={history.isFetchingNextPage}
             onClick={() => {
-              shouldScrollBottom.current = false
               void history.fetchNextPage()
             }}
           >
@@ -97,7 +112,6 @@ export function MessageList({ peerId, dialog, threadId }: { peerId: string; dial
             onClose={() => setContextMenu(null)}
           />
         )}
-        <div ref={endRef} />
       </div>
     </div>
   )

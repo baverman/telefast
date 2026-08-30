@@ -65,10 +65,14 @@ function PhotoView({ message, telegram }: { message: Message; telegram: Telefast
   )
 
   return (
-    <div ref={hostRef} class="min-h-20 min-w-32 max-w-full overflow-hidden rounded-lg">
-      {url.data
-        ? <a href={url.data} target="_blank" rel="noopener noreferrer" class="block"><img class="max-h-96 w-auto max-w-full object-contain" src={url.data} alt="Photo" decoding="async" /></a>
-        : <span class="grid min-h-20 min-w-32 place-items-center text-xs text-zinc-500">Photo</span>}
+    <div
+      ref={hostRef}
+      class="max-w-full overflow-hidden rounded-lg"
+      style={{ width: `min(${photo.width}px, 20rem)`, aspectRatio: `${photo.width} / ${photo.height}` }}
+    >
+      <a href={url.data} target="_blank" rel="noopener noreferrer" class="block size-full">
+        <img class="size-full object-contain" src={url.data} alt="Photo" decoding="async" />
+      </a>
     </div>
   )
 }
@@ -94,22 +98,22 @@ function VideoView({ message, telegram, gif }: { message: Message; telegram: Tel
   )
 
   return (
-    <div ref={hostRef} class="max-w-full overflow-hidden rounded-lg">
-      {url.data
-        ? (
-          <video
-            class="max-h-96 w-auto max-w-full"
-            src={url.data}
-            poster={poster.data}
-            controls={!gif}
-            autoPlay={gif}
-            loop={gif}
-            muted={gif}
-            playsInline
-            preload="metadata"
-          />
-        )
-        : <span class="grid min-h-20 min-w-32 place-items-center text-xs text-zinc-500">Video</span>}
+    <div
+      ref={hostRef}
+      class="max-w-full overflow-hidden rounded-lg"
+      style={{ width: `min(${video.width}px, 20rem)`, aspectRatio: `${video.width} / ${video.height}` }}
+    >
+      <video
+        class="size-full object-contain"
+        src={url.data}
+        poster={poster.data}
+        controls={!gif}
+        autoPlay={gif}
+        loop={gif}
+        muted={gif}
+        playsInline
+        preload="metadata"
+      />
     </div>
   )
 }
@@ -133,11 +137,17 @@ function DocumentView({ message, telegram }: { message: Message; telegram: Telef
   const image = isImageDocument(document)
 
   if (image) {
+    const width = document.thumbnails[0]?.width ?? 0
+    const height = document.thumbnails[0]?.height ?? 0
+    const style = width && height
+      ? { width: `min(${width}px, 20rem)`, aspectRatio: `${width} / ${height}` }
+      : { width: '20rem', aspectRatio: '1 / 1' }
+
     return (
-      <div ref={hostRef} class="max-w-full overflow-hidden rounded-lg">
-        {url.data
-          ? <a href={url.data} target="_blank" rel="noopener noreferrer" class="block"><img class="max-h-96 w-auto max-w-full object-contain" src={url.data} alt={document.fileName || 'Image'} decoding="async" /></a>
-          : <span class="grid min-h-20 min-w-32 place-items-center text-xs text-zinc-500">Image</span>}
+      <div ref={hostRef} class="max-w-full overflow-hidden rounded-lg" style={style}>
+        <a href={url.data} target="_blank" rel="noopener noreferrer" class="block size-full">
+          <img class="size-full object-contain" src={url.data} alt={document.fileName || 'Image'} decoding="async" />
+        </a>
       </div>
     )
   }
