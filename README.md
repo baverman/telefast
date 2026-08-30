@@ -7,6 +7,7 @@ A small, frontend-only Telegram client focused on private and group text chats.
 - Phone-number authentication
 - Telegram login codes and two-step verification
 - Persistent IndexedDB sessions
+- Automatic light and dark themes based on system settings
 - Private and group chat list with unread counts
 - User and group avatars with initials as a fallback
 - URL-based chat navigation with browser history and deep links

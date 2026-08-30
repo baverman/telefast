@@ -363,7 +363,7 @@ function StickerView({
     <div
       ref={hostRef}
       class={compact
-        ? `grid aspect-square place-items-center overflow-hidden ${largePreview ? 'size-32' : 'size-16'}`
+        ? `grid aspect-square place-items-center overflow-hidden ${largePreview ? 'size-48' : 'size-16'}`
         : 'grid aspect-square w-48 max-w-[60vw] place-items-center overflow-hidden md:w-60'
       }
       role="img"
@@ -1201,7 +1201,7 @@ export function App() {
                       <div
                         class="grid gap-2"
                         style={{
-                          gridTemplateColumns: `repeat(auto-fill, minmax(${largeStickerPreviews ? '8rem' : '4rem'}, 1fr))`,
+                          gridTemplateColumns: `repeat(auto-fill, minmax(${largeStickerPreviews ? '12rem' : '4rem'}, 1fr))`,
                         }}
                       >
                         {pickerStickers.map((sticker) => {
