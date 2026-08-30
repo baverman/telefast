@@ -1,35 +1,38 @@
 import { useEffect, useRef } from 'preact/hooks'
 import type { Dialog } from '@mtcute/web'
-import { useTelegram, isGroupPeer, type ChatState } from '../telegram/telegram-provider'
+import { useTelegram, isGroupPeer } from '../telegram/telegram-provider'
+import { useMessages } from '../telegram/queries'
 import { MessageText, StickerView, timeLabel } from './media'
 
-export function MessageList({ peerId, dialog, chat }: { peerId: string; dialog: Dialog; chat: ChatState }) {
-  const { client, loadOlder } = useTelegram()
+export function MessageList({ peerId, dialog }: { peerId: string; dialog: Dialog }) {
+  const { client } = useTelegram()
+  const history = useMessages(peerId)
   const endRef = useRef<HTMLDivElement | null>(null)
   const shouldScrollBottom = useRef(true)
 
   useEffect(() => {
     if (shouldScrollBottom.current) endRef.current?.scrollIntoView({ block: 'end' })
     shouldScrollBottom.current = true
-  }, [chat.messages])
+  }, [history.messages])
 
   return (
     <div class="min-h-0 flex-1 overflow-y-auto px-4 py-6 md:px-8">
       <div class="mx-auto flex min-h-full max-w-3xl flex-col justify-end gap-2">
-        {chat.hasOlder && (
+        {history.hasNextPage && (
           <button
             class="mx-auto mb-4 rounded-full border border-zinc-700 bg-zinc-900 px-4 py-2 text-xs text-zinc-300 hover:bg-zinc-800 disabled:opacity-50"
-            disabled={chat.loadingOlder}
+            disabled={history.isFetchingNextPage}
             onClick={() => {
               shouldScrollBottom.current = false
-              void loadOlder(peerId)
+              void history.fetchNextPage()
             }}
           >
-            {chat.loadingOlder ? 'Loading…' : 'Load older messages'}
+            {history.isFetchingNextPage ? 'Loading…' : 'Load older messages'}
           </button>
         )}
-        {chat.loading && !chat.messages.length && <p class="my-auto text-center text-sm text-zinc-500">Loading messages…</p>}
-        {chat.messages.map((message) => (
+        {history.isPending && <p class="my-auto text-center text-sm text-zinc-500">Loading messages…</p>}
+        {history.isError && <p class="my-auto text-center text-sm text-red-300">Failed to load messages.</p>}
+        {history.messages.map((message) => (
           <article
             key={message.id}
             class={message.media?.type === 'sticker'

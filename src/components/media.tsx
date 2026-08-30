@@ -1,7 +1,9 @@
-import type { ComponentChildren } from 'preact'
+import type { ComponentChildren, RefObject } from 'preact'
 import { useEffect, useRef, useState } from 'preact/hooks'
+import { useQuery } from '@tanstack/preact-query'
 import type { Dialog, Message } from '@mtcute/web'
 import type { TelefastClient } from '../telegram'
+import { cachedMediaUrl } from '../telegram/media-cache'
 
 export function initials(name = '?') {
   return name.split(/\s+/).slice(0, 2).map((part) => part[0]).join('').toUpperCase()
@@ -86,31 +88,24 @@ export function MessageText({ message }: { message: Message }) {
   return <>{parts}</>
 }
 
-const avatarUrls = new Map<string, string>()
-const avatarRequests = new Map<string, Promise<string>>()
-
-function requestAvatar(telegram: TelefastClient, peer: Dialog['peer']) {
-  const photo = peer.photo
-  if (!photo) return Promise.resolve('')
-  const key = photo.small.uniqueFileId
-  const cached = avatarUrls.get(key)
-  if (cached) return Promise.resolve(cached)
-  const pending = avatarRequests.get(key)
-  if (pending) return pending
-
-  const request = telegram.downloadAsBuffer(photo.small)
-    .then((bytes) => {
-      const url = URL.createObjectURL(new Blob([Uint8Array.from(bytes)], { type: 'image/jpeg' }))
-      avatarUrls.set(key, url)
-      avatarRequests.delete(key)
-      return url
-    })
-    .catch((error) => {
-      avatarRequests.delete(key)
-      throw error
-    })
-  avatarRequests.set(key, request)
-  return request
+function useVisible(ref: RefObject<Element>, rootMargin: string) {
+  const [visible, setVisible] = useState(typeof IntersectionObserver === 'undefined')
+  useEffect(() => {
+    if (visible) return
+    const host = ref.current
+    if (!host || typeof IntersectionObserver === 'undefined') {
+      setVisible(true)
+      return
+    }
+    const observer = new IntersectionObserver((entries) => {
+      if (!entries.some((entry) => entry.isIntersecting)) return
+      setVisible(true)
+      observer.disconnect()
+    }, { rootMargin })
+    observer.observe(host)
+    return () => observer.disconnect()
+  }, [ref, rootMargin, visible])
+  return visible
 }
 
 export function Avatar({
@@ -123,34 +118,26 @@ export function Avatar({
   className: string
 }) {
   const hostRef = useRef<HTMLSpanElement | null>(null)
-  const photoKey = peer.photo?.small.uniqueFileId ?? ''
-  const [source, setSource] = useState(() => avatarUrls.get(photoKey) ?? '')
+  const visible = useVisible(hostRef, '160px')
+  const photo = peer.photo?.small
+  const photoKey = photo?.uniqueFileId ?? ''
+  const avatar = useQuery({
+    queryKey: ['telegram', 'avatar', photoKey],
+    queryFn: () => telegram!.downloadAsBuffer(photo!),
+    enabled: Boolean(telegram && photo && visible),
+    staleTime: Infinity,
+  })
+  const [source, setSource] = useState('')
 
   useEffect(() => {
-    setSource(avatarUrls.get(photoKey) ?? '')
-    if (!telegram || !photoKey || !peer.photo) return
-    let active = true
-    const load = () => {
-      void requestAvatar(telegram, peer)
-        .then((url) => { if (active) setSource(url) })
-        .catch((error) => console.warn('[Telefast] Failed to load avatar', error))
+    if (!avatar.data) {
+      setSource('')
+      return
     }
-    const host = hostRef.current
-    if (!host || typeof IntersectionObserver === 'undefined') {
-      load()
-      return () => { active = false }
-    }
-    const observer = new IntersectionObserver((entries) => {
-      if (!entries.some((entry) => entry.isIntersecting)) return
-      observer.disconnect()
-      load()
-    }, { rootMargin: '160px' })
-    observer.observe(host)
-    return () => {
-      active = false
-      observer.disconnect()
-    }
-  }, [photoKey, telegram, peer])
+    const url = URL.createObjectURL(new Blob([Uint8Array.from(avatar.data)], { type: 'image/jpeg' }))
+    setSource(url)
+    return () => URL.revokeObjectURL(url)
+  }, [avatar.data])
 
   return (
     <span ref={hostRef} class={`${className} overflow-hidden`} aria-hidden="true">
@@ -173,65 +160,46 @@ export function StickerView({
   largePreview?: boolean
 }) {
   const hostRef = useRef<HTMLDivElement | null>(null)
-  const [source, setSource] = useState('')
-  const [failed, setFailed] = useState(false)
+  const visible = useVisible(hostRef, '240px')
+  const animated = sticker.sourceType === 'animated'
+  const mimeType = sticker.sourceType === 'video' ? 'video/webm' : 'image/webp'
+  const stickerQuery = useQuery({
+    queryKey: ['telegram', 'sticker-file', sticker.uniqueFileId],
+    queryFn: async (): Promise<string | Uint8Array | null> => {
+      if (!telegram) return null
+      if (animated) return telegram.downloadAsBuffer(sticker)
+      return cachedMediaUrl(telegram, sticker.uniqueFileId, sticker, mimeType)
+    },
+    enabled: Boolean(telegram && visible),
+    staleTime: Infinity,
+  })
+  const source = typeof stickerQuery.data === 'string' ? stickerQuery.data : ''
+  const bytes = stickerQuery.data instanceof Uint8Array ? stickerQuery.data : undefined
 
   useEffect(() => {
-    if (!telegram) return
+    if (!bytes || !animated || !hostRef.current) return
     let active = true
-    let objectUrl = ''
-    let cleanup = () => {}
-
-    const load = async () => {
-      try {
-        const bytes = await telegram.downloadAsBuffer(sticker)
-        if (!active) return
-        if (sticker.sourceType === 'static' || sticker.sourceType === 'video') {
-          const mimeType = sticker.sourceType === 'video' ? 'video/webm' : 'image/webp'
-          objectUrl = URL.createObjectURL(new Blob([Uint8Array.from(bytes)], { type: mimeType }))
-          setSource(objectUrl)
-          return
-        }
-        const animationData = await new Response(
-          new Blob([Uint8Array.from(bytes)]).stream().pipeThrough(new DecompressionStream('gzip')),
-        ).json()
-        const { default: lottie } = await import('lottie-web/build/player/lottie_light')
-        if (!active || !hostRef.current) return
-        const animation = lottie.loadAnimation({
-          container: hostRef.current,
-          renderer: 'svg',
-          loop: true,
-          autoplay: true,
-          animationData,
-        })
-        cleanup = () => animation.destroy()
-      } catch (error) {
-        if (active) {
-          console.warn('[Telefast] Failed to load sticker', error)
-          setFailed(true)
-        }
-      }
-    }
-
-    const host = hostRef.current
-    if (!host || typeof IntersectionObserver === 'undefined') {
-      void load()
-    } else {
-      const observer = new IntersectionObserver((entries) => {
-        if (!entries.some((entry) => entry.isIntersecting)) return
-        observer.disconnect()
-        void load()
-      }, { rootMargin: '240px' })
-      observer.observe(host)
-      cleanup = () => observer.disconnect()
-    }
-
+    let destroy = () => {}
+    void (async () => {
+      const animationData = await new Response(
+        new Blob([Uint8Array.from(bytes)]).stream().pipeThrough(new DecompressionStream('gzip')),
+      ).json()
+      const { default: lottie } = await import('lottie-web/build/player/lottie_light')
+      if (!active || !hostRef.current) return
+      const animation = lottie.loadAnimation({
+        container: hostRef.current,
+        renderer: 'svg',
+        loop: true,
+        autoplay: true,
+        animationData,
+      })
+      destroy = () => animation.destroy()
+    })().catch((error) => console.warn('[Telefast] Failed to render sticker', error))
     return () => {
       active = false
-      cleanup()
-      if (objectUrl) URL.revokeObjectURL(objectUrl)
+      destroy()
     }
-  }, [sticker, telegram])
+  }, [animated, bytes])
 
   const label = `${sticker.emoji ? `${sticker.emoji} ` : ''}Sticker`
   return (
@@ -246,7 +214,7 @@ export function StickerView({
     >
       {sticker.sourceType === 'static' && source && <img class="size-full object-contain" src={source} alt={label} decoding="async" />}
       {sticker.sourceType === 'video' && source && <video class="size-full object-contain" src={source} autoPlay loop muted playsInline aria-label={label} />}
-      {failed && <span class="text-sm text-zinc-400">{label}</span>}
+      {stickerQuery.isError && <span class="text-sm text-zinc-400">{label}</span>}
     </div>
   )
 }

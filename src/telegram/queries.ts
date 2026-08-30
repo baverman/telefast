@@ -1,0 +1,172 @@
+import { Long, Sticker, type Dialog, type StickerSet, type tl } from '@mtcute/web'
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/preact-query'
+import { useMemo } from 'preact/hooks'
+import { useTelegram } from './telegram-provider'
+import { dialogId, isSupportedDialog } from './model'
+import { appendMessage, cachedDialog, telegramKeys, type HistoryPage, type StickerData } from './query-data'
+
+async function loadDialogs(client: NonNullable<ReturnType<typeof useTelegram>['client']>) {
+  const dialogs: Dialog[] = []
+  for await (const dialog of client.iterDialogs({ limit: 100 })) {
+    if (isSupportedDialog(dialog)) dialogs.push(dialog)
+  }
+  return dialogs
+}
+
+async function resolveDialog(
+  client: NonNullable<ReturnType<typeof useTelegram>['client']>,
+  queryClient: ReturnType<typeof useQueryClient>,
+  peerId: string,
+) {
+  const cached = cachedDialog(queryClient, peerId)
+  if (cached) return cached
+  const numericPeerId = Number(peerId)
+  if (!Number.isSafeInteger(numericPeerId)) throw new Error('Invalid Telegram peer')
+  const [dialog] = await client.getPeerDialogs([numericPeerId])
+  if (!dialog || !isSupportedDialog(dialog)) throw new Error('Telegram chat not found')
+  queryClient.setQueryData<Dialog[]>(telegramKeys.dialogs(), (current = []) => (
+    current.some((item) => dialogId(item) === peerId) ? current : [...current, dialog]
+  ))
+  return dialog
+}
+
+export function useDialogs() {
+  const { client, status } = useTelegram()
+  const queryClient = useQueryClient()
+  return useQuery({
+    queryKey: telegramKeys.dialogs(),
+    queryFn: async () => {
+      const next = await loadDialogs(client!)
+      const current = queryClient.getQueryData<Dialog[]>(telegramKeys.dialogs()) ?? []
+      const resolved = queryClient.getQueriesData<Dialog>({ queryKey: ['telegram', 'dialog'] })
+        .flatMap(([, dialog]) => dialog ? [dialog] : [])
+      const retained = [...current, ...resolved]
+      retained.forEach((dialog) => {
+        const id = dialogId(dialog)
+        const hasCachedChat = Boolean(queryClient.getQueryData(telegramKeys.messages(id)))
+        const hasResolvedDialog = resolved.some((item) => dialogId(item) === id)
+        if ((hasCachedChat || hasResolvedDialog) && !next.some((item) => dialogId(item) === id)) next.push(dialog)
+      })
+      return next
+    },
+    enabled: status === 'authenticated' && Boolean(client),
+    staleTime: 30_000,
+  })
+}
+
+export function useDialog(peerId?: string) {
+  const { client, status } = useTelegram()
+  const queryClient = useQueryClient()
+  return useQuery({
+    queryKey: telegramKeys.dialog(peerId ?? ''),
+    queryFn: () => resolveDialog(client!, queryClient, peerId!),
+    enabled: status === 'authenticated' && Boolean(client && peerId),
+    initialData: peerId ? cachedDialog(queryClient, peerId) : undefined,
+    staleTime: Infinity,
+    retry: false,
+  })
+}
+
+export function useMessages(peerId: string) {
+  const { client, status } = useTelegram()
+  const queryClient = useQueryClient()
+  const dialog = useDialog(peerId)
+  const query = useInfiniteQuery({
+    queryKey: telegramKeys.messages(peerId),
+    queryFn: async ({ pageParam }): Promise<HistoryPage> => {
+      const target = dialog.data ?? await resolveDialog(client!, queryClient, peerId)
+      const result = await client!.getHistory(target.peer, {
+        limit: 50,
+        ...(pageParam ? { offset: pageParam } : {}),
+      })
+      await client!.readHistory(target.peer)
+      void queryClient.invalidateQueries({ queryKey: telegramKeys.dialogs() })
+      return { messages: [...result].reverse(), next: result.next ?? null }
+    },
+    initialPageParam: null as HistoryPage['next'],
+    getNextPageParam: (page) => page.next ?? undefined,
+    enabled: status === 'authenticated' && Boolean(client && dialog.data),
+    staleTime: Infinity,
+  })
+
+  const messages = useMemo(() => [...(query.data?.pages ?? [])]
+    .reverse()
+    .flatMap((page) => page.messages)
+    .filter((message, index, all) => all.findIndex((item) => item.id === message.id) === index), [query.data])
+
+  return { ...query, messages, dialog: dialog.data, dialogError: dialog.error }
+}
+
+function stickersFromRaw(documents: tl.TypeDocument[]) {
+  return documents.flatMap((document) => {
+    if (document._ !== 'document') return []
+    const stickerAttribute = document.attributes.find(
+      (attribute) => attribute._ === 'documentAttributeSticker' || attribute._ === 'documentAttributeCustomEmoji',
+    )
+    if (!stickerAttribute) return []
+    const sizeAttribute = document.attributes.find(
+      (attribute) => attribute._ === 'documentAttributeImageSize' || attribute._ === 'documentAttributeVideo',
+    )
+    return [new Sticker(document, stickerAttribute, sizeAttribute)]
+  })
+}
+
+export function useStickers() {
+  const { client, status } = useTelegram()
+  return useQuery({
+    queryKey: telegramKeys.stickers(),
+    queryFn: async (): Promise<StickerData> => {
+      const [installed, recent, favorites] = await Promise.all([
+        client!.getInstalledStickers(),
+        client!.call({ _: 'messages.getRecentStickers', attached: false, hash: Long.ZERO }),
+        client!.call({ _: 'messages.getFavedStickers', hash: Long.ZERO }),
+      ])
+      const packs = await Promise.allSettled(
+        installed.filter((pack) => !pack.isArchived).map((pack) => client!.getStickerSet(pack)),
+      )
+      return {
+        packs: packs.flatMap((result) => result.status === 'fulfilled' ? [result.value as StickerSet] : []),
+        recent: recent._ === 'messages.recentStickers' ? stickersFromRaw(recent.stickers) : [],
+        favorites: favorites._ === 'messages.favedStickers' ? stickersFromRaw(favorites.stickers) : [],
+      }
+    },
+    enabled: status === 'authenticated' && Boolean(client),
+    staleTime: 5 * 60_000,
+  })
+}
+
+export function useSendText(peerId: string) {
+  const { client } = useTelegram()
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async (text: string) => {
+      const dialog = await resolveDialog(client!, queryClient, peerId)
+      return client!.sendText(dialog.peer, text.trim())
+    },
+    onSuccess: (message) => {
+      appendMessage(queryClient, peerId, message)
+      void queryClient.invalidateQueries({ queryKey: telegramKeys.dialogs() })
+    },
+  })
+}
+
+export function useSendSticker(peerId: string) {
+  const { client } = useTelegram()
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async (sticker: Sticker) => {
+      if (sticker.sourceType !== 'static') throw new Error('Only static stickers can be sent')
+      const dialog = await resolveDialog(client!, queryClient, peerId)
+      const sent = await client!.sendMedia(dialog.peer, sticker.inputMedia)
+      return { sent, sticker }
+    },
+    onSuccess: ({ sent, sticker }) => {
+      appendMessage(queryClient, peerId, sent)
+      queryClient.setQueryData<StickerData>(telegramKeys.stickers(), (current) => current ? {
+        ...current,
+        recent: [sticker, ...current.recent.filter((item) => item.uniqueFileId !== sticker.uniqueFileId)],
+      } : current)
+      void queryClient.invalidateQueries({ queryKey: telegramKeys.dialogs() })
+    },
+  })
+}

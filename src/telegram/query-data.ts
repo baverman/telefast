@@ -1,0 +1,37 @@
+import type { Dialog, Message, Sticker, StickerSet } from '@mtcute/web'
+import type { InfiniteData, QueryClient } from '@tanstack/preact-query'
+
+export interface HistoryPage {
+  messages: Message[]
+  next: { id: number; date: number } | null
+}
+
+export interface StickerData {
+  packs: StickerSet[]
+  recent: Sticker[]
+  favorites: Sticker[]
+}
+
+export const telegramKeys = {
+  all: ['telegram'] as const,
+  dialogs: () => ['telegram', 'dialogs'] as const,
+  dialog: (peerId: string) => ['telegram', 'dialog', peerId] as const,
+  messages: (peerId: string) => ['telegram', 'messages', peerId] as const,
+  stickers: () => ['telegram', 'stickers'] as const,
+}
+
+export function appendMessage(queryClient: QueryClient, peerId: string, message: Message) {
+  queryClient.setQueryData<InfiniteData<HistoryPage, HistoryPage['next']>>(
+    telegramKeys.messages(peerId),
+    (current) => {
+      if (!current || current.pages.some((page) => page.messages.some((item) => item.id === message.id))) return current
+      const pages = [...current.pages]
+      pages[0] = { ...pages[0], messages: [...pages[0].messages, message] }
+      return { ...current, pages }
+    },
+  )
+}
+
+export function cachedDialog(queryClient: QueryClient, peerId: string) {
+  return queryClient.getQueryData<Dialog[]>(telegramKeys.dialogs())?.find((dialog) => String(dialog.peer.id) === peerId)
+}

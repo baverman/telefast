@@ -1,11 +1,12 @@
 import { useMemo, useState } from 'preact/hooks'
 import { useTelegram, dialogId, isGroupPeer } from '../telegram/telegram-provider'
+import { useDialogs } from '../telegram/queries'
 import { Avatar, messagePreview, timeLabel } from './media'
 
 export function ChatSidebar({ selectedPeerId }: { selectedPeerId?: string }) {
-  const {
-    dialogs, client, busy, logout, notificationPermission, enableNotifications,
-  } = useTelegram()
+  const { client, busy, logout, notificationPermission, enableNotifications } = useTelegram()
+  const dialogsQuery = useDialogs()
+  const dialogs = dialogsQuery.data ?? []
   const [search, setSearch] = useState('')
   const visibleDialogs = useMemo(() => {
     const query = search.trim().toLowerCase()
@@ -67,7 +68,8 @@ export function ChatSidebar({ selectedPeerId }: { selectedPeerId?: string }) {
             </a>
           )
         })}
-        {!visibleDialogs.length && <p class="px-4 py-8 text-center text-sm text-zinc-500">No chats found.</p>}
+        {dialogsQuery.isPending && <p class="px-4 py-8 text-center text-sm text-zinc-500">Loading chats…</p>}
+        {!dialogsQuery.isPending && !visibleDialogs.length && <p class="px-4 py-8 text-center text-sm text-zinc-500">No chats found.</p>}
       </div>
     </aside>
   )

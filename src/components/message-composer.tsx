@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'preact/hooks'
-import { useTelegram } from '../telegram/telegram-provider'
+import { useSendText } from '../telegram/queries'
 import { StickerPicker } from './sticker-picker'
 
 export function MessageComposer({ peerId }: { peerId: string }) {
-  const { busy, sendText } = useTelegram()
+  const sendText = useSendText(peerId)
   const [draft, setDraft] = useState('')
   const [pickerOpen, setPickerOpen] = useState(false)
 
@@ -23,7 +23,7 @@ export function MessageComposer({ peerId }: { peerId: string }) {
     const text = draft.trim()
     setDraft('')
     try {
-      await sendText(peerId, text)
+      await sendText.mutateAsync(text)
     } catch {
       setDraft(text)
     }
@@ -55,7 +55,7 @@ export function MessageComposer({ peerId }: { peerId: string }) {
         />
         <button
           class="grid size-11 shrink-0 place-items-center rounded-full bg-sky-500 font-bold text-white transition hover:bg-sky-400 disabled:opacity-40"
-          disabled={!draft.trim() || busy}
+          disabled={!draft.trim() || sendText.isPending}
           type="submit"
           aria-label="Send message"
         >↑</button>

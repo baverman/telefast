@@ -1,28 +1,19 @@
-import { useTelegram, dialogId, type ChatState } from '../telegram/telegram-provider'
+import { useTelegram } from '../telegram/telegram-provider'
+import { useDialog } from '../telegram/queries'
 import { ChatSidebar } from './chat-sidebar'
 import { Conversation, EmptyConversation } from './conversation'
 
-const EMPTY_CHAT: ChatState = {
-  messages: [],
-  historyOffset: null,
-  hasOlder: false,
-  loading: false,
-  loadingOlder: false,
-}
-
 export function ChatLayout({ selectedPeerId }: { selectedPeerId?: string }) {
-  const { dialogs, chats, error, clearError } = useTelegram()
-  const selected = selectedPeerId
-    ? dialogs.find((dialog) => dialogId(dialog) === selectedPeerId)
-    : undefined
+  const { error, clearError } = useTelegram()
+  const selected = useDialog(selectedPeerId)
 
   return (
     <main class="flex h-screen overflow-hidden bg-zinc-950 text-zinc-100">
-      <ChatSidebar selectedPeerId={selected ? selectedPeerId : undefined} />
-      {selected && selectedPeerId ? (
-        <Conversation peerId={selectedPeerId} dialog={selected} chat={chats[selectedPeerId] ?? EMPTY_CHAT} />
+      <ChatSidebar selectedPeerId={selected.data ? selectedPeerId : undefined} />
+      {selected.data && selectedPeerId ? (
+        <Conversation peerId={selectedPeerId} dialog={selected.data} />
       ) : (
-        <EmptyConversation />
+        <EmptyConversation message={selected.isError ? 'Chat not found' : undefined} />
       )}
       {error && (
         <button

@@ -11,6 +11,9 @@ importers:
       '@mtcute/web':
         specifier: ^0.32.0
         version: 0.32.0
+      '@tanstack/preact-query':
+        specifier: ^5.102.8
+        version: 5.102.8(preact@10.29.8)
       lottie-web:
         specifier: ^5.13.0
         version: 5.13.0
@@ -477,6 +480,14 @@ packages:
     resolution: {integrity: sha512-yYU8cogLeSh/ms2jh8Fj7jaba/EWa7Ja6GoUqYZaraEuCI5YS6ms6ObZgjjedm+jm6XZjdNRWBpPP6Z86oOxcw==}
     peerDependencies:
       vite: ^5.2.0 || ^6 || ^7 || ^8
+
+  '@tanstack/preact-query@5.102.8':
+    resolution: {integrity: sha512-JH6sNnuc34j76cBKMS6ilwXHLO1W6svKh8Egk6WgYi6hCdYiM5Svq6glOaWt5aYPf+evBiGuLHUZLcCO7ORX5Q==}
+    peerDependencies:
+      preact: ^10.0.0
+
+  '@tanstack/query-core@5.102.8':
+    resolution: {integrity: sha512-ZNjkJ33CqvPNec/6lZBnHqLc3EVGPZ9ySLhYahU9TcuRFdmwXewuj0c4hwSWcGHqEUwcSrKeZ+oGcvPBqXcQcg==}
 
   '@types/esrecurse@4.3.1':
     resolution: {integrity: sha512-xJBAbDifo5hpffDBuHl0Y8ywswbiAp/Wi7Y/GtAgSlZyIABppyurxVueOPE8LUQOxdlgi6Zqce7uoEpqNTeiUw==}
@@ -1624,6 +1635,13 @@ snapshots:
       '@tailwindcss/oxide': 4.3.3
       tailwindcss: 4.3.3
       vite: 8.2.2(@types/node@26.4.0)(jiti@2.7.0)
+
+  '@tanstack/preact-query@5.102.8(preact@10.29.8)':
+    dependencies:
+      '@tanstack/query-core': 5.102.8
+      preact: 10.29.8(preact-render-to-string@6.7.0)
+
+  '@tanstack/query-core@5.102.8': {}
 
   '@types/esrecurse@4.3.1': {}
 

@@ -1,18 +1,19 @@
-import { useEffect, useMemo, useState } from 'preact/hooks'
+import { useMemo, useState } from 'preact/hooks'
 import type { Sticker } from '@mtcute/web'
 import { useTelegram } from '../telegram/telegram-provider'
+import { useSendSticker, useStickers } from '../telegram/queries'
 import { StickerView } from './media'
 
 export function StickerPicker({ peerId, onSent }: { peerId: string; onSent: () => void }) {
-  const {
-    client, busy, stickerPickerLoading, stickerPacks, recentStickers, favoriteStickers,
-    loadStickers, sendSticker,
-  } = useTelegram()
+  const { client } = useTelegram()
+  const stickersQuery = useStickers()
+  const sendSticker = useSendSticker(peerId)
+  const stickerPacks = stickersQuery.data?.packs ?? []
+  const recentStickers = stickersQuery.data?.recent ?? []
+  const favoriteStickers = stickersQuery.data?.favorites ?? []
   const [tab, setTab] = useState('recent')
   const [search, setSearch] = useState('')
   const [large, setLarge] = useState(false)
-
-  useEffect(() => { void loadStickers() }, [])
 
   const stickers = useMemo(() => {
     const query = search.trim().toLowerCase()
@@ -73,7 +74,7 @@ export function StickerPicker({ peerId, onSent }: { peerId: string; onSent: () =
         ))}
       </nav>
       <div class="min-h-48 flex-1 overflow-y-auto p-3">
-        {stickerPickerLoading ? (
+        {stickersQuery.isPending ? (
           <p class="grid min-h-40 place-items-center text-sm text-zinc-500">Loading stickers…</p>
         ) : stickers.length ? (
           <div
@@ -87,9 +88,9 @@ export function StickerPicker({ peerId, onSent }: { peerId: string; onSent: () =
                   key={sticker.uniqueFileId}
                   class="relative grid aspect-square place-items-center rounded-xl hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-40"
                   type="button"
-                  disabled={disabled || busy}
+                  disabled={disabled || sendSticker.isPending}
                   title={disabled ? `${sticker.sourceType} stickers are not supported for sending yet` : `Send ${sticker.emoji || 'sticker'}`}
-                  onClick={() => void sendSticker(peerId, sticker).then(onSent)}
+                  onClick={() => sendSticker.mutate(sticker, { onSuccess: onSent })}
                 >
                   {disabled ? (
                     <>
