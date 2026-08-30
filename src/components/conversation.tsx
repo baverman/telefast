@@ -1,5 +1,6 @@
 import type { Dialog } from '@mtcute/web'
 import { useTelegram } from '../telegram/telegram-provider'
+import { canSendMessages } from '../telegram/model'
 import { Avatar } from './media'
 import { MessageList } from './message-list'
 import { MessageComposer } from './message-composer'
@@ -18,7 +19,13 @@ export function Conversation({ peerId, dialog, threadId }: { peerId: string; dia
         <strong class="truncate text-sm font-medium">{dialog.peer.displayName}</strong>
       </header>
       <MessageList peerId={peerId} dialog={dialog} threadId={threadId} />
-      <MessageComposer peerId={peerId} threadId={threadId} />
+      {canSendMessages(dialog.peer)
+        ? <MessageComposer peerId={peerId} threadId={threadId} />
+        : (
+          <div class="shrink-0 border-t border-zinc-800 bg-zinc-900 p-4 text-center text-sm text-zinc-500">
+            You can't send messages here
+          </div>
+        )}
     </section>
   )
 }

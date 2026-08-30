@@ -12,6 +12,12 @@ export function isBroadcastChannel(peer: Dialog['peer']) {
   return peer.type === 'chat' && peer.chatType === 'channel'
 }
 
+export function canSendMessages(peer: Dialog['peer']) {
+  if (peer.type !== 'chat') return true
+  if (peer.chatType === 'channel') return peer.isCreator || peer.adminRights?.postMessages === true
+  return peer.permissions == null || peer.permissions.canSendMessages
+}
+
 export function isSupportedPeer(peer: Dialog['peer']) {
   return peer.type === 'user' || (peer.type === 'chat' && peer.chatType !== 'community')
 }
