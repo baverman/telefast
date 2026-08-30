@@ -67,19 +67,26 @@ export function useDialog(peerId?: string) {
   })
 }
 
-export function useMessages(peerId: string) {
+export function useMessages(peerId: string, threadId?: number) {
   const { client, status } = useTelegram()
   const queryClient = useQueryClient()
   const dialog = useDialog(peerId)
   const query = useInfiniteQuery({
-    queryKey: telegramKeys.messages(peerId),
+    queryKey: telegramKeys.messages(peerId, threadId),
     queryFn: async ({ pageParam }): Promise<HistoryPage> => {
       const target = dialog.data ?? await resolveDialog(client!, queryClient, peerId)
-      const result = await client!.getHistory(target.peer, {
-        limit: 50,
-        ...(pageParam ? { offset: pageParam } : {}),
-      })
-      return { messages: [...result].reverse(), next: result.next ?? null }
+      const result = threadId != null
+        ? await client!.searchMessages({
+          chatId: target.peer,
+          threadId,
+          limit: 50,
+          ...(pageParam ? { offset: pageParam as number } : {}),
+        })
+        : await client!.getHistory(target.peer, {
+          limit: 50,
+          ...(pageParam ? { offset: pageParam as Exclude<HistoryPage['next'], number | null> } : {}),
+        })
+      return { messages: [...result].reverse(), next: (result.next ?? null) as HistoryPage['next'] }
     },
     initialPageParam: null as HistoryPage['next'],
     getNextPageParam: (page) => page.next ?? undefined,
@@ -138,7 +145,7 @@ function commandEntity(text: string) {
   if (!match) return null
   return { _: 'messageEntityBotCommand' as const, offset: 0, length: match[0].length }
 }
-export function useSendText(peerId: string) {
+export function useSendText(peerId: string, threadId?: number) {
   const { client } = useTelegram()
   const queryClient = useQueryClient()
   return useMutation({
@@ -146,10 +153,10 @@ export function useSendText(peerId: string) {
       const dialog = await resolveDialog(client!, queryClient, peerId)
       const trimmed = text.trim()
       const entity = commandEntity(trimmed)
-      return client!.sendText(dialog.peer, entity ? { text: trimmed, entities: [entity] } : trimmed)
+      return client!.sendText(dialog.peer, entity ? { text: trimmed, entities: [entity] } : trimmed, threadId != null ? { threadId } : undefined)
     },
     onSuccess: (message) => {
-      appendMessage(queryClient, peerId, message)
+      appendMessage(queryClient, peerId, message, threadId)
       void queryClient.invalidateQueries({ queryKey: telegramKeys.dialogs() })
     },
   })
@@ -176,7 +183,7 @@ export function useSendSticker(peerId: string) {
   })
 }
 
-export function useSendReaction(peerId: string) {
+export function useSendReaction(peerId: string, threadId?: number) {
   const { client } = useTelegram()
   const queryClient = useQueryClient()
   return useMutation({
@@ -189,7 +196,7 @@ export function useSendReaction(peerId: string) {
       })
     },
     onSuccess: (updated) => {
-      if (updated) upsertMessage(queryClient, peerId, updated)
+      if (updated) upsertMessage(queryClient, peerId, updated, threadId)
     },
   })
 }

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'preact/hooks'
+import { useLocation } from 'preact-iso'
 import type { Dialog, Message } from '@mtcute/web'
 import { useTelegram, isGroupPeer } from '../telegram/telegram-provider'
 import { useMessages, useSendText } from '../telegram/queries'
@@ -6,12 +7,24 @@ import { StickerView, timeLabel } from './media'
 import { MessageContent } from './message-content'
 import { ReactionBar, ReactionContextMenu } from './reaction-bar'
 
-export function MessageList({ peerId, dialog }: { peerId: string; dialog: Dialog }) {
+export function MessageList({ peerId, dialog, threadId }: { peerId: string; dialog: Dialog; threadId?: number }) {
   const { client } = useTelegram()
-  const history = useMessages(peerId)
-  const sendCommand = useSendText(peerId)
+  const location = useLocation()
+  const history = useMessages(peerId, threadId)
+  const sendCommand = useSendText(peerId, threadId)
   const endRef = useRef<HTMLDivElement | null>(null)
   const shouldScrollBottom = useRef(true)
+
+  async function openComments(post: Message) {
+    if (!client) return
+    try {
+      const discussion = await client.getDiscussionMessage({ message: post })
+      if (!discussion) return
+      location.route(`/chat/${String(discussion.chat.id)}?thread=${discussion.id}`)
+    } catch (error) {
+      console.error('[Telefast] Failed to open comments', error)
+    }
+  }
   const [contextMenu, setContextMenu] = useState<{ message: Message; x: number; y: number } | null>(null)
 
   useEffect(() => {
@@ -60,7 +73,16 @@ export function MessageList({ peerId, dialog }: { peerId: string; dialog: Dialog
               <MessageContent message={message} telegram={client} onCommand={(command) => sendCommand.mutate(command)} />
             )}
             <div class="mt-1 flex flex-wrap items-center gap-1">
-              {!message.isService && <ReactionBar message={message} peerId={peerId} />}
+              {message.replies?.hasComments && message.replies.discussion != null && (
+                <button
+                  type="button"
+                  class="inline-flex items-center gap-1 rounded-full bg-zinc-900 px-2 py-0.5 text-[11px] text-zinc-400 hover:text-sky-300"
+                  onClick={() => void openComments(message)}
+                >
+                  💬 {message.replies.count > 0 ? message.replies.count : 'Comments'}
+                </button>
+              )}
+              {!message.isService && <ReactionBar message={message} peerId={peerId} threadId={threadId} />}
               <time class="ml-auto text-[10px] text-zinc-400/80">{timeLabel(message.date)}</time>
             </div>
           </article>
@@ -68,6 +90,7 @@ export function MessageList({ peerId, dialog }: { peerId: string; dialog: Dialog
         {contextMenu && (
           <ReactionContextMenu
             message={contextMenu.message}
+            threadId={threadId}
             peerId={peerId}
             x={contextMenu.x}
             y={contextMenu.y}

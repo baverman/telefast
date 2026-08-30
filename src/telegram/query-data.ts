@@ -3,7 +3,7 @@ import type { InfiniteData, QueryClient } from '@tanstack/preact-query'
 
 export interface HistoryPage {
   messages: Message[]
-  next: { id: number; date: number } | null
+  next: { id: number; date: number } | number | null
 }
 
 export interface StickerData {
@@ -16,13 +16,15 @@ export const telegramKeys = {
   all: ['telegram'] as const,
   dialogs: () => ['telegram', 'dialogs'] as const,
   dialog: (peerId: string) => ['telegram', 'dialog', peerId] as const,
-  messages: (peerId: string) => ['telegram', 'messages', peerId] as const,
+  messages: (peerId: string, threadId?: number) => threadId != null
+    ? ['telegram', 'messages', peerId, 'thread', String(threadId)] as const
+    : ['telegram', 'messages', peerId] as const,
   stickers: () => ['telegram', 'stickers'] as const,
 }
 
-export function appendMessage(queryClient: QueryClient, peerId: string, message: Message) {
+export function appendMessage(queryClient: QueryClient, peerId: string, message: Message, threadId?: number) {
   queryClient.setQueryData<InfiniteData<HistoryPage, HistoryPage['next']>>(
-    telegramKeys.messages(peerId),
+    telegramKeys.messages(peerId, threadId),
     (current) => {
       if (!current || current.pages.some((page) => page.messages.some((item) => item.id === message.id))) return current
       const pages = [...current.pages]
@@ -32,9 +34,9 @@ export function appendMessage(queryClient: QueryClient, peerId: string, message:
   )
 }
 
-export function upsertMessage(queryClient: QueryClient, peerId: string, message: Message) {
+export function upsertMessage(queryClient: QueryClient, peerId: string, message: Message, threadId?: number) {
   queryClient.setQueryData<InfiniteData<HistoryPage, HistoryPage['next']>>(
-    telegramKeys.messages(peerId),
+    telegramKeys.messages(peerId, threadId),
     (current) => {
       if (!current) return current
       const pages = current.pages.map((page) => ({

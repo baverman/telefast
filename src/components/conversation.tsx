@@ -4,7 +4,7 @@ import { Avatar } from './media'
 import { MessageList } from './message-list'
 import { MessageComposer } from './message-composer'
 
-export function Conversation({ peerId, dialog }: { peerId: string; dialog: Dialog }) {
+export function Conversation({ peerId, dialog, threadId }: { peerId: string; dialog: Dialog; threadId?: number }) {
   const { client } = useTelegram()
   return (
     <section class="flex min-w-0 flex-1 flex-col bg-chat">
@@ -17,8 +17,8 @@ export function Conversation({ peerId, dialog }: { peerId: string; dialog: Dialo
         />
         <strong class="truncate text-sm font-medium">{dialog.peer.displayName}</strong>
       </header>
-      <MessageList peerId={peerId} dialog={dialog} />
-      <MessageComposer peerId={peerId} />
+      <MessageList peerId={peerId} dialog={dialog} threadId={threadId} />
+      <MessageComposer peerId={peerId} threadId={threadId} />
     </section>
   )
 }

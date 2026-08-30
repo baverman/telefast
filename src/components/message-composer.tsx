@@ -3,13 +3,13 @@ import { useBotCommands, useDialogs, useMessages, useSendText } from '../telegra
 import { dialogId, useTelegram } from '../telegram/telegram-provider'
 import { StickerPicker } from './sticker-picker'
 
-export function MessageComposer({ peerId }: { peerId: string }) {
-  const sendText = useSendText(peerId)
+export function MessageComposer({ peerId, threadId }: { peerId: string; threadId?: number }) {
+  const sendText = useSendText(peerId, threadId)
   const { markRead } = useTelegram()
   const dialogs = useDialogs()
   const dialog = dialogs.data?.find((item) => dialogId(item) === peerId)
   const commandsQuery = useBotCommands(peerId)
-  const history = useMessages(peerId)
+  const history = useMessages(peerId, threadId)
   const [drafts, setDrafts] = useState<Record<string, string>>({})
   const draft = drafts[peerId] ?? ''
   const setDraft = (value: string) => setDrafts((current) => ({ ...current, [peerId]: value }))

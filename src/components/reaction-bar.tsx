@@ -4,8 +4,8 @@ import { useSendReaction } from '../telegram/queries'
 
 const QUICK_REACTIONS = ['👍', '❤️', '😂', '🔥', '🎉', '😢']
 
-export function ReactionBar({ message, peerId }: { message: Message; peerId: string }) {
-  const react = useSendReaction(peerId)
+export function ReactionBar({ message, peerId, threadId }: { message: Message; peerId: string; threadId?: number }) {
+  const react = useSendReaction(peerId, threadId)
   const reactions = (message.reactions?.reactions ?? [])
     .filter((reaction) => typeof reaction.emoji === 'string')
 
@@ -40,17 +40,19 @@ export function ReactionBar({ message, peerId }: { message: Message; peerId: str
 export function ReactionContextMenu({
   message,
   peerId,
+  threadId,
   x,
   y,
   onClose,
 }: {
   message: Message
   peerId: string
+  threadId?: number
   x: number
   y: number
   onClose: () => void
 }) {
-  const react = useSendReaction(peerId)
+  const react = useSendReaction(peerId, threadId)
   const reactions = message.reactions?.reactions ?? []
   const isActive = (emoji: string) => reactions.some((reaction) => reaction.emoji === emoji && reaction.order !== null)
 

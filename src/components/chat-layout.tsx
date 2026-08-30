@@ -3,7 +3,7 @@ import { useDialog } from '../telegram/queries'
 import { ChatSidebar } from './chat-sidebar'
 import { Conversation, EmptyConversation } from './conversation'
 
-export function ChatLayout({ selectedPeerId }: { selectedPeerId?: string }) {
+export function ChatLayout({ selectedPeerId, threadId }: { selectedPeerId?: string; threadId?: number }) {
   const { error, clearError } = useTelegram()
   const selected = useDialog(selectedPeerId)
 
@@ -11,7 +11,7 @@ export function ChatLayout({ selectedPeerId }: { selectedPeerId?: string }) {
     <main class="flex h-screen overflow-hidden bg-zinc-950 text-zinc-100">
       <ChatSidebar selectedPeerId={selected.data ? selectedPeerId : undefined} />
       {selected.data && selectedPeerId ? (
-        <Conversation peerId={selectedPeerId} dialog={selected.data} />
+        <Conversation peerId={selectedPeerId} dialog={selected.data} threadId={threadId} />
       ) : (
         <EmptyConversation message={selected.isError ? 'Chat not found' : undefined} />
       )}
