@@ -1,0 +1,3 @@
+# Bugs
+
+* Bot command could lead to previous message refresh. Now messages aren't updated.

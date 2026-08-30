@@ -58,7 +58,7 @@ function entityHref(entity: TelegramMessageEntity, text: string) {
   return ''
 }
 
-export function MessageText({ message }: { message: Message }) {
+export function MessageText({ message, onCommand }: { message: Message; onCommand?: (command: string) => void }) {
   const parts: ComponentChildren[] = []
   let cursor = 0
   const entities = [...message.entities].sort((left, right) => left.offset - right.offset)
@@ -66,6 +66,23 @@ export function MessageText({ message }: { message: Message }) {
   entities.forEach((entity) => {
     if (entity.offset < cursor) return
     const text = message.text.slice(entity.offset, entity.offset + entity.length)
+
+    if (entity.is('bot_command')) {
+      if (entity.offset > cursor) parts.push(message.text.slice(cursor, entity.offset))
+      parts.push(
+        <button
+          key={`command-${entity.offset}-${entity.length}`}
+          type="button"
+          class="rounded bg-sky-500/10 px-1 font-mono text-sky-300 hover:bg-sky-500/20"
+          onClick={() => onCommand?.(text)}
+        >
+          {text}
+        </button>,
+      )
+      cursor = entity.offset + entity.length
+      return
+    }
+
     const href = entityHref(entity, text)
     if (!href) return
     if (entity.offset > cursor) parts.push(message.text.slice(cursor, entity.offset))

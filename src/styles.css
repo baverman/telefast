@@ -14,6 +14,10 @@
   --app-hover-bg: #27272a;
   --app-hover-text: #fafafa;
   --app-message-in: #27272a;
+  --app-message-out: #075985;
+  --app-message-out-text: #ffffff;
+  --app-message-out-link: #e0f2fe;
+  --app-message-out-link-hover: #ffffff;
 }
 
 @media (prefers-color-scheme: light) {
@@ -42,6 +46,10 @@
     --app-hover-bg: #e4e4e7;
     --app-hover-text: #18181b;
     --app-message-in: #ffffff;
+    --app-message-out: #dbeafe;
+    --app-message-out-text: #082f49;
+    --app-message-out-link: #075985;
+    --app-message-out-link-hover: #0c4a6e;
   }
 }
 
@@ -159,16 +167,16 @@ button:disabled {
 .message-out {
   align-self: flex-end;
   border-bottom-right-radius: 0.3rem;
-  background: #075985;
-  color: white;
+  background: var(--app-message-out);
+  color: var(--app-message-out-text);
 }
 
 .message-out a {
-  color: #e0f2fe;
+  color: var(--app-message-out-link);
 }
 
 .message-out a:hover {
-  color: white;
+  color: var(--app-message-out-link-hover);
 }
 
 .sticker-message {

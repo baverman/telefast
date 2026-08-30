@@ -216,7 +216,7 @@ function MediaBlock({ message, telegram }: { message: Message; telegram: Telefas
   }
 }
 
-export function MessageContent({ message, telegram }: { message: Message; telegram: TelefastClient | null }) {
+export function MessageContent({ message, telegram, onCommand }: { message: Message; telegram: TelefastClient | null; onCommand?: (command: string) => void }) {
   if (message.isService) {
     return <span class="text-sm text-zinc-400">{serviceMessageText(message.action, message.sender.displayName)}</span>
   }
@@ -226,7 +226,7 @@ export function MessageContent({ message, telegram }: { message: Message; telegr
       <MediaBlock message={message} telegram={telegram} />
       {message.text && (
         <p class="whitespace-pre-wrap break-words text-[15px] leading-5">
-          <MessageText message={message} />
+          <MessageText message={message} onCommand={onCommand} />
         </p>
       )}
     </div>

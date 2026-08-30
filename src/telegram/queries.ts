@@ -135,13 +135,20 @@ export function useStickers() {
   })
 }
 
+function commandEntity(text: string) {
+  const match = text.match(/^\/([a-zA-Z0-9_]+)(?:@[a-zA-Z0-9_]+)?/)
+  if (!match) return null
+  return { _: 'messageEntityBotCommand' as const, offset: 0, length: match[0].length }
+}
 export function useSendText(peerId: string) {
   const { client } = useTelegram()
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: async (text: string) => {
       const dialog = await resolveDialog(client!, queryClient, peerId)
-      return client!.sendText(dialog.peer, text.trim())
+      const trimmed = text.trim()
+      const entity = commandEntity(trimmed)
+      return client!.sendText(dialog.peer, entity ? { text: trimmed, entities: [entity] } : trimmed)
     },
     onSuccess: (message) => {
       appendMessage(queryClient, peerId, message)

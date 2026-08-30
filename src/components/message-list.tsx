@@ -1,13 +1,14 @@
 import { useEffect, useRef } from 'preact/hooks'
 import type { Dialog } from '@mtcute/web'
 import { useTelegram, isGroupPeer } from '../telegram/telegram-provider'
-import { useMessages } from '../telegram/queries'
+import { useMessages, useSendText } from '../telegram/queries'
 import { StickerView, timeLabel } from './media'
 import { MessageContent } from './message-content'
 
 export function MessageList({ peerId, dialog }: { peerId: string; dialog: Dialog }) {
   const { client } = useTelegram()
   const history = useMessages(peerId)
+  const sendCommand = useSendText(peerId)
   const endRef = useRef<HTMLDivElement | null>(null)
   const shouldScrollBottom = useRef(true)
 
@@ -49,7 +50,7 @@ export function MessageList({ peerId, dialog }: { peerId: string; dialog: Dialog
             {message.media?.type === 'sticker' ? (
               <StickerView sticker={message.media} telegram={client} />
             ) : (
-              <MessageContent message={message} telegram={client} />
+              <MessageContent message={message} telegram={client} onCommand={(command) => sendCommand.mutate(command)} />
             )}
             <time class="mt-1 block text-right text-[10px] text-zinc-400/80">{timeLabel(message.date)}</time>
           </article>
