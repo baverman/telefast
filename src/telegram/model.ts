@@ -8,8 +8,12 @@ export function isGroupPeer(peer: Dialog['peer']) {
   return peer.type === 'chat' && peer.isGroup
 }
 
+export function isBroadcastChannel(peer: Dialog['peer']) {
+  return peer.type === 'chat' && peer.chatType === 'channel'
+}
+
 export function isSupportedPeer(peer: Dialog['peer']) {
-  return peer.type === 'user' || isGroupPeer(peer)
+  return peer.type === 'user' || (peer.type === 'chat' && peer.chatType !== 'community')
 }
 
 export function isSupportedDialog(dialog: Dialog) {

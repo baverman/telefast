@@ -7,7 +7,7 @@ import { appendMessage, cachedDialog, telegramKeys, type HistoryPage, type Stick
 
 async function loadDialogs(client: NonNullable<ReturnType<typeof useTelegram>['client']>) {
   const dialogs: Dialog[] = []
-  for await (const dialog of client.iterDialogs({ limit: 100 })) {
+  for await (const dialog of client.iterDialogs()) {
     if (isSupportedDialog(dialog)) dialogs.push(dialog)
   }
   return dialogs
