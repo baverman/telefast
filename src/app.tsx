@@ -1,10 +1,14 @@
 import { Route, Router } from 'preact-iso'
-import { ChatListPage } from './pages/chat-list-page'
-import { ChatPage } from './pages/chat-page'
+import { ChatLayout } from './components/chat-layout'
+import { FaviconBadge } from './components/favicon-badge'
 import { LoginPage } from './pages/login-page'
 import { NotFoundPage } from './pages/not-found-page'
+import { Redirect } from './routing/redirect'
 import { TelegramProvider } from './telegram/telegram-provider'
-import { FaviconBadge } from './components/favicon-badge'
+
+function HomeRedirect() {
+  return <Redirect to="/chat" />
+}
 
 export function App() {
   return (
@@ -12,8 +16,8 @@ export function App() {
       <FaviconBadge />
       <Router>
         <Route path="/login" component={LoginPage} />
-        <Route path="/" component={ChatListPage} />
-        <Route path="/chat/:peerId" component={ChatPage} />
+        <Route path="/" component={HomeRedirect} />
+        <Route path="/chat/:peerId?" component={ChatLayout} />
         <Route default component={NotFoundPage} />
       </Router>
     </TelegramProvider>

@@ -8,3 +8,4 @@
 * Bot command could lead to previous message refresh. Now messages aren't updated.
 * Scroll position is unstable
 * Scroll position on chat switch is weird
+* Edit doesn't doesn't update message.

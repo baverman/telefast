@@ -14,7 +14,7 @@ export function LoginPage() {
   const [password, setPassword] = useState('')
   const [validationError, setValidationError] = useState('')
 
-  if (status === 'authenticated') return <Redirect to="/" />
+  if (status === 'authenticated') return <Redirect to="/chat" />
   if (status === 'loading') return <ConnectionScreen />
 
   function start(event: SubmitEvent) {

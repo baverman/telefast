@@ -2,7 +2,7 @@ import { useTelegram } from '../telegram/telegram-provider'
 
 export function NotFoundPage() {
   const { status } = useTelegram()
-  const home = status === 'authenticated' ? '/' : '/login'
+  const home = status === 'authenticated' ? '/chat' : '/login'
 
   return (
     <main class="grid min-h-screen place-items-center bg-zinc-950 p-5 text-zinc-100">
