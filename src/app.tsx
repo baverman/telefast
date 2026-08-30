@@ -1,6 +1,6 @@
 import type { ComponentChildren } from 'preact'
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks'
-import type { Dialog, Message, SentCode } from '@mtcute/web'
+import { Long, Sticker, type Dialog, type Message, type SentCode, type StickerSet, type tl } from '@mtcute/web'
 import { useLocation } from 'preact-iso'
 import { createTelegramConnection, type TelefastClient } from './telegram'
 
@@ -14,6 +14,22 @@ type AuthStep = 'credentials' | 'code' | 'password'
 type Resolver = (value: string) => void
 
 type Connection = ReturnType<typeof createTelegramConnection>
+
+type StickerTab = 'recent' | 'favorites' | string
+
+function stickersFromRaw(documents: tl.TypeDocument[]) {
+  return documents.flatMap((document) => {
+    if (document._ !== 'document') return []
+    const stickerAttribute = document.attributes.find(
+      (attribute) => attribute._ === 'documentAttributeSticker' || attribute._ === 'documentAttributeCustomEmoji',
+    )
+    if (!stickerAttribute) return []
+    const sizeAttribute = document.attributes.find(
+      (attribute) => attribute._ === 'documentAttributeImageSize' || attribute._ === 'documentAttributeVideo',
+    )
+    return [new Sticker(document, stickerAttribute, sizeAttribute)]
+  })
+}
 
 function errorText(error: unknown) {
   if (error instanceof Error) {
@@ -264,7 +280,17 @@ function Avatar({
 
 type StickerMedia = Extract<NonNullable<Message['media']>, { type: 'sticker' }>
 
-function StickerView({ sticker, telegram }: { sticker: StickerMedia; telegram: TelefastClient | null }) {
+function StickerView({
+  sticker,
+  telegram,
+  compact = false,
+  largePreview = false,
+}: {
+  sticker: StickerMedia
+  telegram: TelefastClient | null
+  compact?: boolean
+  largePreview?: boolean
+}) {
   const hostRef = useRef<HTMLDivElement | null>(null)
   const [source, setSource] = useState('')
   const [failed, setFailed] = useState(false)
@@ -336,7 +362,10 @@ function StickerView({ sticker, telegram }: { sticker: StickerMedia; telegram: T
   return (
     <div
       ref={hostRef}
-      class="grid aspect-square w-48 max-w-[60vw] place-items-center overflow-hidden md:w-60"
+      class={compact
+        ? `grid aspect-square place-items-center overflow-hidden ${largePreview ? 'size-32' : 'size-16'}`
+        : 'grid aspect-square w-48 max-w-[60vw] place-items-center overflow-hidden md:w-60'
+      }
       role="img"
       aria-label={label}
     >
@@ -373,6 +402,15 @@ export function App() {
   const [historyOffset, setHistoryOffset] = useState<{ id: number; date: number } | null>(null)
   const [hasOlderMessages, setHasOlderMessages] = useState(false)
   const [loadingOlder, setLoadingOlder] = useState(false)
+  const [stickerPickerOpen, setStickerPickerOpen] = useState(false)
+  const [stickerPickerLoading, setStickerPickerLoading] = useState(false)
+  const [stickerPacks, setStickerPacks] = useState<StickerSet[]>([])
+  const [recentStickers, setRecentStickers] = useState<Sticker[]>([])
+  const [favoriteStickers, setFavoriteStickers] = useState<Sticker[]>([])
+  const [stickerTab, setStickerTab] = useState<StickerTab>('recent')
+  const [stickerSearch, setStickerSearch] = useState('')
+  const [stickerPickerLoaded, setStickerPickerLoaded] = useState(false)
+  const [largeStickerPreviews, setLargeStickerPreviews] = useState(false)
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission | 'unsupported'>(
     typeof Notification === 'undefined' ? 'unsupported' : Notification.permission,
   )
@@ -398,6 +436,30 @@ export function App() {
     if (!query) return dialogs
     return dialogs.filter((dialog) => dialog.peer.displayName.toLowerCase().includes(query))
   }, [dialogs, search])
+
+  const pickerStickers = useMemo(() => {
+    const query = stickerSearch.trim().toLowerCase()
+    let stickers: Sticker[]
+
+    if (query) {
+      stickers = stickerPacks.flatMap((pack) => {
+        const packMatches = pack.title.toLowerCase().includes(query) || pack.shortName.toLowerCase().includes(query)
+        return pack.stickers
+          .filter((info) => packMatches || info.emoji.includes(stickerSearch.trim()))
+          .map((info) => info.sticker)
+      })
+    } else if (stickerTab === 'recent') {
+      stickers = recentStickers
+    } else if (stickerTab === 'favorites') {
+      stickers = favoriteStickers
+    } else {
+      stickers = stickerPacks
+        .find((pack) => pack.shortName === stickerTab)
+        ?.stickers.map((info) => info.sticker) ?? []
+    }
+
+    return [...new Map(stickers.map((sticker) => [sticker.uniqueFileId, sticker])).values()]
+  }, [stickerSearch, stickerTab, stickerPacks, recentStickers, favoriteStickers])
 
   function client() {
     return connectionRef.current?.client ?? null
@@ -621,6 +683,19 @@ export function App() {
   }, [screen, location.path, dialogs])
 
   useEffect(() => {
+    setStickerPickerOpen(false)
+  }, [location.path])
+
+  useEffect(() => {
+    if (!stickerPickerOpen) return
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setStickerPickerOpen(false)
+    }
+    window.addEventListener('keydown', closeOnEscape)
+    return () => window.removeEventListener('keydown', closeOnEscape)
+  }, [stickerPickerOpen])
+
+  useEffect(() => {
     if (shouldScrollBottomRef.current) {
       messageEndRef.current?.scrollIntoView({ block: 'end' })
     }
@@ -716,6 +791,64 @@ export function App() {
     location.route(`/chat/${encodeURIComponent(dialogId(dialog))}`)
   }
 
+  async function loadStickerPicker() {
+    const telegram = client()
+    if (!telegram || stickerPickerLoading || stickerPickerLoaded) return
+
+    setStickerPickerLoading(true)
+    try {
+      const [installed, recent, favorites] = await Promise.all([
+        telegram.getInstalledStickers(),
+        telegram.call({ _: 'messages.getRecentStickers', attached: false, hash: Long.ZERO }),
+        telegram.call({ _: 'messages.getFavedStickers', hash: Long.ZERO }),
+      ])
+      const packResults = await Promise.allSettled(
+        installed.filter((pack) => !pack.isArchived).map((pack) => telegram.getStickerSet(pack)),
+      )
+      setStickerPacks(
+        packResults.flatMap((result) => result.status === 'fulfilled' ? [result.value] : []),
+      )
+      setRecentStickers(recent._ === 'messages.recentStickers' ? stickersFromRaw(recent.stickers) : [])
+      setFavoriteStickers(favorites._ === 'messages.favedStickers' ? stickersFromRaw(favorites.stickers) : [])
+      setStickerPickerLoaded(true)
+    } catch (pickerError) {
+      setError(reportError('Failed to load stickers', pickerError))
+    } finally {
+      setStickerPickerLoading(false)
+    }
+  }
+
+  function toggleStickerPicker() {
+    const nextOpen = !stickerPickerOpen
+    setStickerPickerOpen(nextOpen)
+    if (nextOpen) void loadStickerPicker()
+  }
+
+  async function sendSticker(sticker: Sticker) {
+    const telegram = client()
+    const dialog = selectedRef.current
+    if (!telegram || !dialog || busy || sticker.sourceType !== 'static') return
+
+    setBusy(true)
+    shouldScrollBottomRef.current = true
+    try {
+      const sent = await telegram.sendMedia(dialog.peer, sticker.inputMedia)
+      setMessages((current) =>
+        current.some((message) => message.id === sent.id) ? current : [...current, sent],
+      )
+      setRecentStickers((current) => [
+        sticker,
+        ...current.filter((item) => item.uniqueFileId !== sticker.uniqueFileId),
+      ])
+      setStickerPickerOpen(false)
+      await loadDialogs(telegram)
+    } catch (sendError) {
+      setError(reportError('Failed to send sticker', sendError))
+    } finally {
+      setBusy(false)
+    }
+  }
+
   async function sendMessage(event: SubmitEvent) {
     event.preventDefault()
     const telegram = client()
@@ -756,6 +889,11 @@ export function App() {
       selectedRef.current = null
       setDialogs([])
       setMessages([])
+      setStickerPickerOpen(false)
+      setStickerPickerLoaded(false)
+      setStickerPacks([])
+      setRecentStickers([])
+      setFavoriteStickers([])
       setAuthStep('credentials')
       setScreen('auth')
       location.route('/login', true)
@@ -1014,8 +1152,104 @@ export function App() {
               </div>
             </div>
 
-            <form class="shrink-0 border-t border-zinc-800 bg-zinc-900 p-3 md:px-6" onSubmit={sendMessage}>
+            <form class="relative shrink-0 border-t border-zinc-800 bg-zinc-900 p-3 md:px-6" onSubmit={sendMessage}>
+              {stickerPickerOpen && (
+                <section class="absolute bottom-full left-3 right-3 z-20 mx-auto mb-2 flex max-h-[70vh] max-w-3xl flex-col overflow-hidden rounded-2xl border border-zinc-700 bg-zinc-900 shadow-2xl shadow-black/50">
+                  <div class="flex gap-2 border-b border-zinc-800 p-3">
+                    <input
+                      class="min-w-0 flex-1 rounded-xl border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm outline-none placeholder:text-zinc-600 focus:border-sky-500"
+                      value={stickerSearch}
+                      onInput={(event) => setStickerSearch(event.currentTarget.value)}
+                      placeholder="Search installed stickers"
+                      aria-label="Search installed stickers"
+                    />
+                    <button
+                      class={`shrink-0 rounded-xl border px-3 text-xs font-semibold transition ${largeStickerPreviews ? 'border-sky-500 bg-sky-500/20 text-sky-200' : 'border-zinc-700 bg-zinc-800 text-zinc-300 hover:bg-zinc-700'}`}
+                      type="button"
+                      title="Show sticker previews two times larger"
+                      aria-label="Show sticker previews two times larger"
+                      aria-pressed={largeStickerPreviews}
+                      onClick={() => setLargeStickerPreviews((current) => !current)}
+                    >
+                     Big
+                    </button>
+                  </div>
+                  <nav class="flex shrink-0 gap-1 overflow-x-auto border-b border-zinc-800 p-2" aria-label="Sticker packs">
+                    {[
+                      { id: 'recent', label: 'Recent' },
+                      { id: 'favorites', label: 'Favorites' },
+                      ...stickerPacks.map((pack) => ({ id: pack.shortName, label: pack.title })),
+                    ].map((tab) => (
+                      <button
+                        key={tab.id}
+                        class={`shrink-0 rounded-lg px-3 py-1.5 text-xs ${stickerTab === tab.id && !stickerSearch ? 'bg-sky-500/20 text-sky-200' : 'text-zinc-400 hover:bg-zinc-800'}`}
+                        type="button"
+                        title={tab.label}
+                        onClick={() => {
+                          setStickerSearch('')
+                          setStickerTab(tab.id)
+                        }}
+                      >
+                        {tab.label}
+                      </button>
+                    ))}
+                  </nav>
+                  <div class="min-h-48 flex-1 overflow-y-auto p-3">
+                    {stickerPickerLoading ? (
+                      <p class="grid min-h-40 place-items-center text-sm text-zinc-500">Loading stickers…</p>
+                    ) : pickerStickers.length ? (
+                      <div
+                        class="grid gap-2"
+                        style={{
+                          gridTemplateColumns: `repeat(auto-fill, minmax(${largeStickerPreviews ? '8rem' : '4rem'}, 1fr))`,
+                        }}
+                      >
+                        {pickerStickers.map((sticker) => {
+                          const disabled = sticker.sourceType !== 'static'
+                          return (
+                            <button
+                              key={sticker.uniqueFileId}
+                              class="relative grid aspect-square place-items-center rounded-xl hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-40"
+                              type="button"
+                              disabled={disabled || busy}
+                              title={disabled ? `${sticker.sourceType === 'video' ? 'Video' : 'Animated'} stickers are not supported for sending yet` : `Send ${sticker.emoji || 'sticker'}`}
+                              onClick={() => void sendSticker(sticker)}
+                            >
+                              {disabled ? (
+                                <>
+                                  <span class={largeStickerPreviews ? 'text-4xl' : 'text-2xl'}>{sticker.emoji || '◌'}</span>
+                                  <span class="absolute bottom-1 rounded bg-zinc-950/80 px-1 text-[9px] uppercase text-zinc-400">
+                                    {sticker.sourceType}
+                                  </span>
+                                </>
+                              ) : (
+                                <StickerView
+                                  sticker={sticker}
+                                  telegram={connectionRef.current?.client ?? null}
+                                  compact
+                                  largePreview={largeStickerPreviews}
+                                />
+                              )}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    ) : (
+                      <p class="grid min-h-40 place-items-center text-sm text-zinc-500">No stickers found.</p>
+                    )}
+                  </div>
+                </section>
+              )}
               <div class="mx-auto flex max-w-3xl items-end gap-2">
+                <button
+                  class={`grid size-11 shrink-0 place-items-center rounded-full border text-lg transition ${stickerPickerOpen ? 'border-sky-500 bg-sky-500/15' : 'border-zinc-700 bg-zinc-800 hover:bg-zinc-700'}`}
+                  type="button"
+                  onClick={toggleStickerPicker}
+                  aria-label="Open sticker picker"
+                  aria-expanded={stickerPickerOpen}
+                >
+                  ◇
+                </button>
                 <textarea
                   class="max-h-36 min-h-11 flex-1 resize-none rounded-2xl border border-zinc-700 bg-zinc-800 px-4 py-3 text-sm outline-none placeholder:text-zinc-500 focus:border-sky-500"
                   rows={1}
