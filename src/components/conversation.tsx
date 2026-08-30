@@ -1,0 +1,35 @@
+import type { Dialog } from '@mtcute/web'
+import { useTelegram, type ChatState } from '../telegram/telegram-provider'
+import { Avatar } from './media'
+import { MessageList } from './message-list'
+import { MessageComposer } from './message-composer'
+
+export function Conversation({ peerId, dialog, chat }: { peerId: string; dialog: Dialog; chat: ChatState }) {
+  const { client } = useTelegram()
+  return (
+    <section class="flex min-w-0 flex-1 flex-col bg-chat">
+      <header class="flex h-16 shrink-0 items-center gap-3 border-b border-zinc-800 bg-zinc-900/90 px-4 backdrop-blur">
+        <a class="icon-button md:hidden" href="/" aria-label="Back to chats">←</a>
+        <Avatar
+          peer={dialog.peer}
+          telegram={client}
+          className="grid size-9 shrink-0 place-items-center rounded-full bg-gradient-to-br from-sky-500 to-indigo-500 text-xs font-semibold"
+        />
+        <strong class="truncate text-sm font-medium">{dialog.peer.displayName}</strong>
+      </header>
+      <MessageList peerId={peerId} dialog={dialog} chat={chat} />
+      <MessageComposer peerId={peerId} />
+    </section>
+  )
+}
+
+export function EmptyConversation() {
+  return (
+    <section class="hidden min-w-0 flex-1 flex-col bg-chat md:flex">
+      <div class="m-auto text-center text-zinc-600">
+        <div class="mx-auto mb-3 grid size-14 place-items-center rounded-2xl border border-zinc-800 text-xl">T</div>
+        <p class="text-sm">Select a chat</p>
+      </div>
+    </section>
+  )
+}
