@@ -1,9 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks'
-import { useBotCommands, useMessages, useSendText } from '../telegram/queries'
+import { useBotCommands, useDialogs, useMessages, useSendText } from '../telegram/queries'
+import { dialogId, useTelegram } from '../telegram/telegram-provider'
 import { StickerPicker } from './sticker-picker'
 
 export function MessageComposer({ peerId }: { peerId: string }) {
   const sendText = useSendText(peerId)
+  const { markRead } = useTelegram()
+  const dialogs = useDialogs()
+  const dialog = dialogs.data?.find((item) => dialogId(item) === peerId)
   const commandsQuery = useBotCommands(peerId)
   const history = useMessages(peerId)
   const [drafts, setDrafts] = useState<Record<string, string>>({})
@@ -109,6 +113,7 @@ export function MessageComposer({ peerId }: { peerId: string }) {
           rows={1}
           value={draft}
           onInput={(event) => setDraft(event.currentTarget.value)}
+          onFocus={() => { console.log('message input focus'); if ((dialog?.unreadCount ?? 0) > 0) void markRead(peerId) }}
           onKeyDown={(event) => {
             if (showMenu && matches.length > 0) {
               if (event.key === 'ArrowDown') {

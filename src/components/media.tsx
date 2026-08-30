@@ -224,13 +224,13 @@ export function StickerView({
       ref={hostRef}
       class={compact
         ? `grid aspect-square place-items-center overflow-hidden ${largePreview ? 'size-32' : 'size-16'}`
-        : 'grid aspect-square w-48 max-w-[60vw] place-items-center overflow-hidden md:w-60'
+        : 'grid place-items-center'
       }
       role="img"
       aria-label={label}
     >
-      {sticker.sourceType === 'static' && source && <img class="size-full object-contain" src={source} alt={label} decoding="async" />}
-      {sticker.sourceType === 'video' && source && <video class="size-full object-contain" src={source} autoPlay loop muted playsInline aria-label={label} />}
+      {sticker.sourceType === 'static' && source && <img class={compact ? 'size-full object-contain' : 'h-auto max-h-60 w-auto max-w-48 md:max-w-60 object-contain'} src={source} alt={label} decoding="async" />}
+      {sticker.sourceType === 'video' && source && <video class={compact ? 'size-full object-contain' : 'h-auto max-h-60 w-auto max-w-48 md:max-w-60 object-contain'} src={source} autoPlay loop muted playsInline aria-label={label} />}
       {stickerQuery.isError && <span class="text-sm text-zinc-400">{label}</span>}
     </div>
   )

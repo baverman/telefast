@@ -79,8 +79,6 @@ export function useMessages(peerId: string) {
         limit: 50,
         ...(pageParam ? { offset: pageParam } : {}),
       })
-      await client!.readHistory(target.peer)
-      void queryClient.invalidateQueries({ queryKey: telegramKeys.dialogs() })
       return { messages: [...result].reverse(), next: result.next ?? null }
     },
     initialPageParam: null as HistoryPage['next'],

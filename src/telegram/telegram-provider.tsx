@@ -4,6 +4,7 @@ import type { SentCode } from '@mtcute/web'
 import { useQueryClient } from '@tanstack/preact-query'
 import { useLocation } from 'preact-iso'
 import { createTelegramConnection, type TelefastClient } from '../telegram'
+import { activeChatPeerId } from './active-chat'
 import { appendMessage, cachedDialog, telegramKeys } from './query-data'
 import { isGroupPeer, isSupportedPeer, messageText } from './model'
 
@@ -40,6 +41,7 @@ interface TelegramContextValue {
   logout(): Promise<void>
   clearError(): void
   enableNotifications(): Promise<void>
+  markRead(peerId: string): Promise<void>
 }
 
 const TelegramContext = createContext<TelegramContextValue | null>(null)
@@ -92,19 +94,24 @@ export function TelegramProvider({ children }: { children: ComponentChildren }) 
     telegram.onNewMessage.add((message) => {
       if (!isSupportedPeer(message.chat)) return
       const peerId = String(message.chat.id)
-      const queryKey = telegramKeys.messages(peerId)
+      const isCurrent = activeChatPeerId === peerId
       appendMessage(queryClient, peerId, message)
-      const active = (queryClient.getQueryCache().find({ queryKey, exact: true })?.getObserversCount() ?? 0) > 0
       const target = cachedDialog(queryClient, peerId)
 
-      if (!message.isOutgoing && active && document.visibilityState === 'visible') {
-        void telegram.readHistory(message.chat).then(() => (
-          queryClient.invalidateQueries({ queryKey: telegramKeys.dialogs() })
-        ))
-      } else if (
+      console.log('[Telefast] notification check', {
+        peerId,
+        isCurrent,
+        isOutgoing: message.isOutgoing,
+        hasTarget: Boolean(target),
+        isMuted: target?.isMuted,
+        notificationType: typeof Notification,
+        permission: typeof Notification !== 'undefined' ? Notification.permission : 'n/a',
+        visibilityState: document.visibilityState,
+      })
+      if (
         !message.isOutgoing && target && target.isMuted !== true &&
         typeof Notification !== 'undefined' && Notification.permission === 'granted' &&
-        document.visibilityState !== 'visible'
+        (document.visibilityState !== 'visible' || !isCurrent)
       ) {
         const body = isGroupPeer(target.peer)
           ? `${message.sender.displayName}: ${messageText(message)}`
@@ -157,24 +164,6 @@ export function TelegramProvider({ children }: { children: ComponentChildren }) 
     })()
     return () => { cancelled = true }
   }, [])
-
-  useEffect(() => {
-    const path = location.path
-    function onVisibilityChange() {
-      if (document.visibilityState !== 'visible') return
-      const match = /^\/chat\/([^/]+)$/.exec(path)
-      if (!match) return
-      const peerId = decodeURIComponent(match[1])
-      const telegram = connectionRef.current?.client
-      const dialog = cachedDialog(queryClient, peerId)
-      if (!telegram || !dialog) return
-      void telegram.readHistory(dialog.peer).then(() => {
-        void queryClient.invalidateQueries({ queryKey: telegramKeys.dialogs() })
-      })
-    }
-    document.addEventListener('visibilitychange', onVisibilityChange)
-    return () => document.removeEventListener('visibilitychange', onVisibilityChange)
-  }, [location.path, queryClient])
 
   async function beginLogin(input: BeginLoginInput) {
     setError('')
@@ -232,6 +221,18 @@ export function TelegramProvider({ children }: { children: ComponentChildren }) 
     resolve(password)
   }
 
+
+  async function markRead(peerId: string) {
+    const telegram = connectionRef.current?.client
+    const dialog = cachedDialog(queryClient, peerId)
+    if (!telegram || !dialog) return
+    try {
+      await telegram.readHistory(dialog.peer)
+      await queryClient.invalidateQueries({ queryKey: telegramKeys.dialogs() })
+    } catch (error) {
+      console.error('[Telefast] Failed to mark chat as read', error)
+    }
+  }
   async function enableNotifications() {
     if (typeof Notification === 'undefined') return
     try {
@@ -263,7 +264,7 @@ export function TelegramProvider({ children }: { children: ComponentChildren }) 
   const value: TelegramContextValue = {
     status, authStep, passwordHint, deliveryLabel, busy, error, client,
     notificationPermission, beginLogin, submitCode, submitPassword, logout,
-    clearError: () => setError(''), enableNotifications,
+    clearError: () => setError(''), enableNotifications, markRead,
   }
 
   return <TelegramContext.Provider value={value}>{children}</TelegramContext.Provider>
