@@ -2,7 +2,8 @@ import { useEffect, useRef } from 'preact/hooks'
 import type { Dialog } from '@mtcute/web'
 import { useTelegram, isGroupPeer } from '../telegram/telegram-provider'
 import { useMessages } from '../telegram/queries'
-import { MessageText, StickerView, timeLabel } from './media'
+import { StickerView, timeLabel } from './media'
+import { MessageContent } from './message-content'
 
 export function MessageList({ peerId, dialog }: { peerId: string; dialog: Dialog }) {
   const { client } = useTelegram()
@@ -35,9 +36,11 @@ export function MessageList({ peerId, dialog }: { peerId: string; dialog: Dialog
         {history.messages.map((message) => (
           <article
             key={message.id}
-            class={message.media?.type === 'sticker'
-              ? `sticker-message ${message.isOutgoing ? 'sticker-out' : 'sticker-in'}`
-              : `message-bubble ${message.isOutgoing ? 'message-out' : 'message-in'}`
+            class={message.isService
+              ? 'message-service'
+              : message.media?.type === 'sticker'
+                ? `sticker-message ${message.isOutgoing ? 'sticker-out' : 'sticker-in'}`
+                : `message-bubble ${message.isOutgoing ? 'message-out' : 'message-in'}`
             }
           >
             {isGroupPeer(dialog.peer) && !message.isOutgoing && (
@@ -46,9 +49,7 @@ export function MessageList({ peerId, dialog }: { peerId: string; dialog: Dialog
             {message.media?.type === 'sticker' ? (
               <StickerView sticker={message.media} telegram={client} />
             ) : (
-              <p class="whitespace-pre-wrap break-words text-[15px] leading-5">
-                {message.text ? <MessageText message={message} /> : 'Unsupported message'}
-              </p>
+              <MessageContent message={message} telegram={client} />
             )}
             <time class="mt-1 block text-right text-[10px] text-zinc-400/80">{timeLabel(message.date)}</time>
           </article>

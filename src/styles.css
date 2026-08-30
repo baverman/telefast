@@ -184,6 +184,16 @@ button:disabled {
   align-self: flex-end;
 }
 
+.message-service {
+  align-self: center;
+  max-width: min(86%, 38rem);
+  padding: 0.25rem 0.75rem;
+  border-radius: 999px;
+  background: rgb(0 0 0 / 0.25);
+  color: var(--app-muted-text);
+  text-align: center;
+}
+
 .loader {
   width: 1rem;
   height: 1rem;

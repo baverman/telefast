@@ -88,7 +88,7 @@ export function MessageText({ message }: { message: Message }) {
   return <>{parts}</>
 }
 
-function useVisible(ref: RefObject<Element>, rootMargin: string) {
+export function useVisible(ref: RefObject<Element>, rootMargin: string) {
   const [visible, setVisible] = useState(typeof IntersectionObserver === 'undefined')
   useEffect(() => {
     if (visible) return
