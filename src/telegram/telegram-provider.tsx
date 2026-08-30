@@ -97,19 +97,19 @@ export function TelegramProvider({ children }: { children: ComponentChildren }) 
       const active = (queryClient.getQueryCache().find({ queryKey, exact: true })?.getObserversCount() ?? 0) > 0
       const target = cachedDialog(queryClient, peerId)
 
-      if (!message.isOutgoing && active && document.hasFocus()) {
+      if (!message.isOutgoing && active && document.visibilityState === 'visible') {
         void telegram.readHistory(message.chat).then(() => (
           queryClient.invalidateQueries({ queryKey: telegramKeys.dialogs() })
         ))
       } else if (
         !message.isOutgoing && target && target.isMuted !== true &&
         typeof Notification !== 'undefined' && Notification.permission === 'granted' &&
-        !document.hasFocus()
+        document.visibilityState !== 'visible'
       ) {
         const body = isGroupPeer(target.peer)
           ? `${message.sender.displayName}: ${messageText(message)}`
           : messageText(message)
-        const notification = new Notification(target.peer.displayName, {
+        const notification = new Notification(`Telefast · ${target.peer.displayName}`, {
           body: body || 'New message',
           tag: `telefast-${peerId}`,
         })
@@ -157,6 +157,24 @@ export function TelegramProvider({ children }: { children: ComponentChildren }) 
     })()
     return () => { cancelled = true }
   }, [])
+
+  useEffect(() => {
+    const path = location.path
+    function onVisibilityChange() {
+      if (document.visibilityState !== 'visible') return
+      const match = /^\/chat\/([^/]+)$/.exec(path)
+      if (!match) return
+      const peerId = decodeURIComponent(match[1])
+      const telegram = connectionRef.current?.client
+      const dialog = cachedDialog(queryClient, peerId)
+      if (!telegram || !dialog) return
+      void telegram.readHistory(dialog.peer).then(() => {
+        void queryClient.invalidateQueries({ queryKey: telegramKeys.dialogs() })
+      })
+    }
+    document.addEventListener('visibilitychange', onVisibilityChange)
+    return () => document.removeEventListener('visibilitychange', onVisibilityChange)
+  }, [location.path, queryClient])
 
   async function beginLogin(input: BeginLoginInput) {
     setError('')

@@ -1,3 +1,10 @@
+# ToDo
+
+* User profile
+* Reaction picker
+* Notification sound (maybe just use dunst)
+
+
 # Bugs
 
 * Bot command could lead to previous message refresh. Now messages aren't updated.
