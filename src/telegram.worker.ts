@@ -19,6 +19,7 @@ function initialize(event: MessageEvent<InitMessage>) {
     apiId,
     apiHash,
     storage: 'telefast-session',
+    network: { pingInterval: 10_000 },
   })
 
   new TelegramWorker({

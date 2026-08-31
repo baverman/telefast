@@ -1,7 +1,7 @@
 import { useEffect } from 'preact/hooks'
 import { useLocation } from 'preact-iso'
-import { useTelegram } from '../telegram/telegram-provider'
-import { useDialog } from '../telegram/queries'
+import { dialogId, useTelegram } from '../telegram/telegram-provider'
+import { useDialogs, useDialog } from '../telegram/queries'
 import { setActiveChatPeerId } from '../telegram/active-chat'
 import { RequireAuth } from '../routing/require-auth'
 import { ChatSidebar } from './chat-sidebar'
@@ -9,14 +9,24 @@ import { Conversation, EmptyConversation } from './conversation'
 
 export function ChatLayout({ peerId }: { peerId?: string }) {
   const location = useLocation()
-  const { error, clearError } = useTelegram()
+  const { error, clearError, markRead } = useTelegram()
+  const dialogs = useDialogs()
   const selected = useDialog(peerId)
   const threadId = Number.isSafeInteger(Number(location.query.thread)) ? Number(location.query.thread) : undefined
+  const hasUnread = (dialogs.data?.find((item) => dialogId(item) === peerId)?.unreadCount ?? 0) > 0
 
   useEffect(() => {
     setActiveChatPeerId(peerId ?? null)
     return () => setActiveChatPeerId(null)
   }, [peerId])
+
+  useEffect(() => {
+    console.log('mark read', peerId)
+    if (!peerId) return
+    if (hasUnread) {
+      void markRead(peerId)
+    }
+  }, [peerId, hasUnread])
 
   return (
     <RequireAuth>
