@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'preact/hooks'
 import { useLocation } from 'preact-iso'
 import type { Dialog, Message } from '@mtcute/web'
 import { useTelegram, isGroupPeer } from '../telegram/telegram-provider'
-import { useMessages, useSendText } from '../telegram/queries'
+import { useMessages } from '../telegram/queries'
 import { StickerView, timeLabel } from './media'
 import { MessageContent } from './message-content'
 import { ReactionBar, ReactionContextMenu } from './reaction-bar'
@@ -11,7 +11,6 @@ export function MessageList({ peerId, dialog, threadId }: { peerId: string; dial
   const { client } = useTelegram()
   const location = useLocation()
   const history = useMessages(peerId, threadId)
-  const sendCommand = useSendText(peerId, threadId)
   const containerRef = useRef<HTMLDivElement | null>(null)
   const previousCountRef = useRef(0)
 
@@ -85,7 +84,7 @@ export function MessageList({ peerId, dialog, threadId }: { peerId: string; dial
             {message.media?.type === 'sticker' ? (
               <StickerView sticker={message.media} telegram={client} />
             ) : (
-              <MessageContent message={message} telegram={client} onCommand={(command) => sendCommand.mutate(command)} />
+              <MessageContent message={message} telegram={client} />
             )}
             <div class="mt-1 flex flex-wrap items-center gap-1">
               {message.replies?.hasComments && message.replies.discussion != null && (
