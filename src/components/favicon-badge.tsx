@@ -3,7 +3,7 @@ import { useTelegram } from '../telegram/telegram-provider'
 import { useDialogs } from '../telegram/queries'
 
 const DEFAULT_FAVICON = `data:image/svg+xml,${encodeURIComponent(
-  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect x="4" y="4" width="56" height="56" rx="14" fill="#0ea5e9"/><text x="32" y="40" font-family="sans-serif" font-size="34" font-weight="700" fill="#ffffff" text-anchor="middle">T</text></svg>',
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="#0ea5e9"/><path d="M19 18h26v7h-9v22h-8V25h-9z" fill="#ffffff"/></svg>',
 )}`
 
 function faviconLink() {
@@ -34,14 +34,12 @@ export function FaviconBadge() {
     if (!context) return
 
     context.beginPath()
-    context.roundRect(4, 4, 56, 56, 14)
+    context.roundRect(0, 0, 64, 64, 14)
     context.fillStyle = '#0ea5e9'
     context.fill()
     context.fillStyle = '#ffffff'
-    context.font = '700 34px sans-serif'
-    context.textAlign = 'center'
-    context.textBaseline = 'middle'
-    context.fillText('T', 32, 33)
+    context.fillRect(19, 18, 26, 7)
+    context.fillRect(28, 25, 8, 22)
 
     const label = unread > 99 ? '99+' : String(unread)
     context.beginPath()
