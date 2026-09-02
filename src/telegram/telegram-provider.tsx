@@ -86,11 +86,21 @@ export function TelegramProvider({ children }: { children: ComponentChildren }) 
     typeof Notification === 'undefined' ? 'unsupported' : Notification.permission,
   )
   const connectionRef = useRef<Connection | null>(null)
+  const recoveringConnectionRef = useRef(false)
   const codeResolver = useRef<Resolver | null>(null)
   const passwordResolver = useRef<Resolver | null>(null)
   const client = connectionRef.current?.client ?? null
 
   function attachUpdates(telegram: TelefastClient) {
+    telegram.onConnectionState.add((state) => {
+      console.log('[Telefast] Telegram connection state:', state)
+    })
+    telegram.onError.add((error) => {
+      console.error('[Telefast] Telegram connection error:', error)
+      if (error.message === 'Worker connection expired') {
+        void recoverConnection(telegram)
+      }
+    })
     telegram.onNewMessage.add((message) => {
       if (!isSupportedPeer(message.chat)) return
       const peerId = String(message.chat.id)
@@ -128,6 +138,50 @@ export function TelegramProvider({ children }: { children: ComponentChildren }) 
       }
       void queryClient.invalidateQueries({ queryKey: telegramKeys.dialogs() })
     })
+  }
+
+  async function recoverConnection(failedClient: TelefastClient) {
+    const current = connectionRef.current
+    if (!current || current.client !== failedClient || recoveringConnectionRef.current) return
+
+    const storedApiId = localStorage.getItem(STORAGE.apiId)
+    const storedApiHash = localStorage.getItem(STORAGE.apiHash)
+    if (!storedApiId || !storedApiHash) {
+      setError('Telegram API credentials are missing. Please log in again.')
+      setStatus('unauthenticated')
+      return
+    }
+
+    recoveringConnectionRef.current = true
+    setStatus('loading')
+    console.log('[Telefast] Recreating expired Telegram worker connection')
+    let replacement: Connection | null = null
+
+    try {
+      await current.destroy()
+      if (connectionRef.current !== current) return
+
+      replacement = createTelegramConnection(Number(storedApiId), storedApiHash)
+      connectionRef.current = replacement
+      await replacement.client.start({})
+      if (connectionRef.current !== replacement) {
+        await replacement.destroy()
+        return
+      }
+
+      enterChats(replacement)
+      await queryClient.invalidateQueries({ queryKey: telegramKeys.all })
+      console.log('[Telefast] Telegram worker connection restored')
+    } catch (recoveryError) {
+      if (replacement) await replacement.destroy().catch(() => undefined)
+      if (connectionRef.current === current || connectionRef.current === replacement) {
+        connectionRef.current = null
+      }
+      setError(reportError('Failed to restore Telegram connection', recoveryError))
+      setStatus('unauthenticated')
+    } finally {
+      recoveringConnectionRef.current = false
+    }
   }
 
   function enterChats(connection: Connection) {

@@ -8,7 +8,7 @@
 
 * Bot command could lead to previous message refresh. Now messages aren't updated.
 * Edit doesn't doesn't update message.
-* Unread count on readonly channels
 * switch doesn't invalidate cac
 * stickers scroll jump
 * square stickers in picker
+* mark read is called with undefined peerId
