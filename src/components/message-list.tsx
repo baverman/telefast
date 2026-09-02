@@ -13,6 +13,23 @@ export function MessageList({ peerId, dialog, threadId }: { peerId: string; dial
   const history = useMessages(peerId, threadId)
   const containerRef = useRef<HTMLDivElement | null>(null)
   const previousCountRef = useRef(0)
+  const initialScrollRef = useRef({
+    key: '',
+    lastReadIngoing: 0,
+    hasUnread: false,
+    done: false,
+  })
+  const chatKey = `${peerId}:${threadId ?? ''}`
+
+  if (initialScrollRef.current.key !== chatKey) {
+    initialScrollRef.current = {
+      key: chatKey,
+      lastReadIngoing: dialog.lastReadIngoing,
+      hasUnread: threadId == null && dialog.unreadCount > 0,
+      done: false,
+    }
+    previousCountRef.current = 0
+  }
 
   async function openComments(post: Message) {
     if (!client) return
@@ -27,14 +44,9 @@ export function MessageList({ peerId, dialog, threadId }: { peerId: string; dial
   const [contextMenu, setContextMenu] = useState<{ message: Message; x: number; y: number } | null>(null)
 
   useEffect(() => {
-    previousCountRef.current = 0
-  }, [peerId, threadId])
-
-  useEffect(() => {
     const container = containerRef.current
     const count = history.messages.length
     const previousCount = previousCountRef.current
-    const isInitial = previousCount === 0 && count > 0
     const grew = count > previousCount
     const isNewOutgoing = grew && history.messages[count - 1]?.isOutgoing === true
     const nearBottom = container
@@ -42,10 +54,34 @@ export function MessageList({ peerId, dialog, threadId }: { peerId: string; dial
       : true
     previousCountRef.current = count
 
-    if (isInitial || isNewOutgoing || nearBottom) {
-      if (container) container.scrollTop = container.scrollHeight
+    if (!container || count === 0) return
+
+    const initialScroll = initialScrollRef.current
+    if (!initialScroll.done) {
+      if (initialScroll.hasUnread) {
+        const oldestMessage = history.messages[0]
+        if (oldestMessage.id > initialScroll.lastReadIngoing && history.hasNextPage) {
+          if (!history.isFetchingNextPage) void history.fetchNextPage()
+          return
+        }
+
+        const firstUnread = history.messages.find((message) => (
+          !message.isOutgoing && message.id > initialScroll.lastReadIngoing
+        ))
+        const target = firstUnread
+          ? container.querySelector<HTMLElement>(`[data-message-id="${firstUnread.id}"]`)
+          : null
+        if (target) target.scrollIntoView({ block: 'start' })
+        else container.scrollTop = container.scrollHeight
+      } else {
+        container.scrollTop = container.scrollHeight
+      }
+      initialScroll.done = true
+      return
     }
-  }, [history.messages])
+
+    if (isNewOutgoing || nearBottom) container.scrollTop = container.scrollHeight
+  }, [history.messages, history.hasNextPage, history.isFetchingNextPage])
 
   return (
     <div ref={containerRef} class="min-h-0 flex-1 overflow-y-auto px-4 py-6 md:px-8">
@@ -66,6 +102,7 @@ export function MessageList({ peerId, dialog, threadId }: { peerId: string; dial
         {history.messages.map((message) => (
           <article
             key={message.id}
+            data-message-id={message.id}
             onContextMenu={(event) => {
               if (window.getSelection()?.toString()) return
               event.preventDefault()
