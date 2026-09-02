@@ -21,11 +21,9 @@ export function ChatLayout({ peerId }: { peerId?: string }) {
   }, [peerId])
 
   useEffect(() => {
-    console.log('mark read', peerId)
-    if (!peerId) return
-    if (hasUnread) {
-      void markRead(peerId)
-    }
+    if (!peerId || !hasUnread) return
+    if (document.visibilityState !== 'visible' || !document.hasFocus()) return
+    void markRead(peerId)
   }, [peerId, hasUnread])
 
   return (

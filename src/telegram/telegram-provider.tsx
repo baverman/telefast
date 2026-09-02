@@ -117,11 +117,12 @@ export function TelegramProvider({ children }: { children: ComponentChildren }) 
         notificationType: typeof Notification,
         permission: typeof Notification !== 'undefined' ? Notification.permission : 'n/a',
         visibilityState: document.visibilityState,
+        hasFocus: document.hasFocus(),
       })
       if (
         !message.isOutgoing && target && target.isMuted !== true &&
         typeof Notification !== 'undefined' && Notification.permission === 'granted' &&
-        (document.visibilityState !== 'visible' || !isCurrent)
+        (document.visibilityState !== 'visible' || !document.hasFocus() || !isCurrent)
       ) {
         const body = isGroupPeer(target.peer)
           ? `${message.sender.displayName}: ${messageText(message)}`
