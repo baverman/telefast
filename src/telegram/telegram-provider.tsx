@@ -6,6 +6,7 @@ import { useLocation } from 'preact-iso'
 import { createTelegramConnection, type TelefastClient } from '../telegram'
 import { activeChatPeerId } from './active-chat'
 import { appendMessage, cachedDialog, telegramKeys } from './query-data'
+import { setMediaStreamClient } from './media-stream'
 import { isGroupPeer, isSupportedPeer, messageText } from './model'
 
 export { dialogId, isGroupPeer } from './model'
@@ -155,6 +156,7 @@ export function TelegramProvider({ children }: { children: ComponentChildren }) 
 
     recoveringConnectionRef.current = true
     setStatus('loading')
+    setMediaStreamClient(null)
     console.log('[Telefast] Recreating expired Telegram worker connection')
     let replacement: Connection | null = null
 
@@ -187,6 +189,7 @@ export function TelegramProvider({ children }: { children: ComponentChildren }) 
 
   function enterChats(connection: Connection) {
     connectionRef.current = connection
+    setMediaStreamClient(connection.client)
     attachUpdates(connection.client)
     setStatus('authenticated')
     setBusy(false)
@@ -225,6 +228,7 @@ export function TelegramProvider({ children }: { children: ComponentChildren }) 
     localStorage.setItem(STORAGE.apiId, String(input.apiId))
     localStorage.setItem(STORAGE.apiHash, input.apiHash)
     setBusy(true)
+    setMediaStreamClient(null)
     if (connectionRef.current) await connectionRef.current.destroy()
     const connection = createTelegramConnection(input.apiId, input.apiHash)
     connectionRef.current = connection
@@ -301,6 +305,7 @@ export function TelegramProvider({ children }: { children: ComponentChildren }) 
     const connection = connectionRef.current
     if (!connection) return
     setBusy(true)
+    setMediaStreamClient(null)
     try {
       await connection.client.logOut()
     } catch (logoutError) {

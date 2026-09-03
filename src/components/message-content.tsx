@@ -1,8 +1,9 @@
-import { useRef, useState } from 'preact/hooks'
+import { useRef } from 'preact/hooks'
 import { useQuery } from '@tanstack/preact-query'
 import type { FileLocation, Message, MessageAction } from '@mtcute/web'
 import type { TelefastClient } from '../telegram'
 import { cachedMediaUrl } from '../telegram/media-cache'
+import { streamedMediaUrl } from '../telegram/media-stream'
 import { MessageText, useVisible } from './media'
 
 const AUTO_IMAGE_LIMIT = 10 * 1024 * 1024
@@ -30,10 +31,18 @@ function formatBytes(bytes: number | undefined) {
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`
 }
 
-function loadLabel(type: string, bytes: number | undefined) {
-  const size = formatBytes(bytes)
-  return `Load ${type}${size ? ` · ${size}` : ''}`
+function MediaDownloadLink({ url, fileName }: { url: string; fileName: string }) {
+  return (
+    <a
+      href={url}
+      download={fileName}
+      class="mt-2 inline-flex rounded-full bg-zinc-900 px-3 py-1.5 text-xs text-zinc-300 hover:bg-zinc-800"
+    >
+      ↓ Download
+    </a>
+  )
 }
+
 
 function serviceMessageText(action: MessageAction | null, sender: string) {
   switch (action?.type) {
@@ -61,45 +70,28 @@ function serviceMessageText(action: MessageAction | null, sender: string) {
 function PhotoView({ message, telegram }: { message: Message; telegram: TelefastClient | null }) {
   const photo = message.media as Extract<NonNullable<Message['media']>, { type: 'photo' }>
   const hostRef = useRef<HTMLDivElement | null>(null)
-  const [requested, setRequested] = useState(false)
   const visible = useVisible(hostRef, '240px')
   const source = photo.getThumbnail('x') ?? photo.getThumbnail('m') ?? photo.getThumbnail('s') ?? photo
-  const thumbnail = photo.getThumbnail('m') ?? photo.getThumbnail('s')
-  const requiresAction = (source.fileSize ?? photo.fileSize ?? Infinity) > AUTO_IMAGE_LIMIT
-  const preview = useMediaUrl(
-    telegram,
-    `photo-preview-${thumbnail?.uniqueFileId ?? ''}`,
-    thumbnail ?? undefined,
-    'image/jpeg',
-    visible && requiresAction && thumbnail?.uniqueFileId !== source.uniqueFileId,
-  )
-  const url = useMediaUrl(
+  const useBlob = source.fileSize != null && source.fileSize <= AUTO_IMAGE_LIMIT
+  const blob = useMediaUrl(
     telegram,
     `photo-${source.uniqueFileId}`,
     source,
     'image/jpeg',
-    (visible && !requiresAction) || requested,
+    visible && useBlob,
   )
-  const displayedUrl = url.data ?? preview.data
+  const streamUrl = streamedMediaUrl(`photo-${source.uniqueFileId}`, source, 'image/jpeg')
+  const url = useBlob ? blob.data : streamUrl
 
   return (
     <div
       ref={hostRef}
-      class="relative max-w-full overflow-hidden rounded-lg bg-zinc-900"
+      class="max-w-full overflow-hidden rounded-lg bg-zinc-900"
       style={{ width: `min(${photo.width}px, 20rem)`, aspectRatio: `${photo.width} / ${photo.height}` }}
     >
-      {displayedUrl && <img class="size-full object-contain" src={displayedUrl} alt="Photo" decoding="async" />}
-      {url.data && <a href={url.data} target="_blank" rel="noopener noreferrer" class="absolute inset-0" aria-label="Open photo" />}
-      {requiresAction && !url.data && (
-        <button
-          type="button"
-          class="absolute inset-0 m-auto h-fit w-fit rounded-full bg-zinc-950/80 px-4 py-2 text-xs text-zinc-100 hover:bg-zinc-800 disabled:opacity-70"
-          disabled={url.isFetching}
-          onClick={() => url.isError ? void url.refetch() : setRequested(true)}
-        >
-          {url.isFetching ? 'Loading…' : loadLabel('photo', source.fileSize ?? photo.fileSize)}
-        </button>
-      )}
+      <a href={url} target="_blank" rel="noopener noreferrer" class="block size-full">
+        {visible && <img class="size-full object-contain" src={url} alt="Photo" decoding="async" />}
+      </a>
     </div>
   )
 }
@@ -107,7 +99,6 @@ function PhotoView({ message, telegram }: { message: Message; telegram: Telefast
 function VideoView({ message, telegram, gif }: { message: Message; telegram: TelefastClient | null; gif: boolean }) {
   const video = message.media as Extract<NonNullable<Message['media']>, { type: 'video' }>
   const hostRef = useRef<HTMLDivElement | null>(null)
-  const [requested, setRequested] = useState(false)
   const visible = useVisible(hostRef, '240px')
   const posterThumb = video.getThumbnail('m') ?? video.getThumbnail('s')
   const poster = useMediaUrl(
@@ -117,45 +108,32 @@ function VideoView({ message, telegram, gif }: { message: Message; telegram: Tel
     'image/jpeg',
     visible,
   )
-  const url = useMediaUrl(
-    telegram,
+  const url = streamedMediaUrl(
     `video-${video.uniqueFileId}`,
     video,
     video.mimeType || 'video/mp4',
-    requested,
+    video.fileName,
   )
 
   return (
     <div
       ref={hostRef}
-      class="relative max-w-full overflow-hidden rounded-lg bg-zinc-900"
-      style={{ width: `min(${video.width}px, 20rem)`, aspectRatio: `${video.width} / ${video.height}` }}
+      class="max-w-full"
+      style={{ width: `min(${video.width}px, 20rem)` }}
     >
-      {url.data ? (
-        <video
-          class="size-full object-contain"
-          src={url.data}
-          poster={poster.data}
-          controls={!gif}
-          autoPlay={gif}
-          loop={gif}
-          muted={gif}
-          playsInline
-          preload="metadata"
-        />
-      ) : (
-        <>
-          {poster.data && <img class="size-full object-contain" src={poster.data} alt="" decoding="async" />}
-          <button
-            type="button"
-            class="absolute inset-0 m-auto h-fit w-fit rounded-full bg-zinc-950/80 px-4 py-2 text-xs text-zinc-100 hover:bg-zinc-800 disabled:opacity-70"
-            disabled={url.isFetching}
-            onClick={() => url.isError ? void url.refetch() : setRequested(true)}
-          >
-            {url.isFetching ? 'Loading…' : loadLabel(gif ? 'GIF' : 'video', video.fileSize)}
-          </button>
-        </>
-      )}
+      <video
+        class="block w-full rounded-lg bg-zinc-900 object-contain"
+        style={{ aspectRatio: `${video.width} / ${video.height}` }}
+        src={url}
+        poster={poster.data}
+        controls={!gif}
+        autoPlay={gif}
+        loop={gif}
+        muted={gif}
+        playsInline
+        preload={gif ? 'auto' : 'metadata'}
+      />
+      <MediaDownloadLink url={url} fileName={video.fileName || (gif ? 'animation.mp4' : 'video.mp4')} />
     </div>
   )
 }
@@ -165,30 +143,65 @@ function isImageDocument(document: Extract<NonNullable<Message['media']>, { type
   return /\.(png|jpe?g|gif|webp|bmp|svg|avif)$/i.test(document.fileName ?? '')
 }
 
+function isVideoDocument(document: Extract<NonNullable<Message['media']>, { type: 'document' }>) {
+  if (document.mimeType.startsWith('video/')) return true
+  return /\.(mp4|m4v|mov|webm|mkv|avi)$/i.test(document.fileName ?? '')
+}
+
 function DocumentView({ message, telegram }: { message: Message; telegram: TelefastClient | null }) {
   const document = message.media as Extract<NonNullable<Message['media']>, { type: 'document' }>
   const hostRef = useRef<HTMLDivElement | null>(null)
-  const [requested, setRequested] = useState(false)
   const visible = useVisible(hostRef, '240px')
   const image = isImageDocument(document)
-  const autoLoad = image && document.fileSize != null && document.fileSize <= AUTO_IMAGE_LIMIT
-  const thumbnail = image
+  const video = isVideoDocument(document)
+  const thumbnail = image || video
     ? document.getThumbnail('m') ?? document.getThumbnail('s') ?? document.thumbnails[0]
     : undefined
-  const url = useMediaUrl(
+  const useBlob = image && document.fileSize != null && document.fileSize <= AUTO_IMAGE_LIMIT
+  const blob = useMediaUrl(
     telegram,
     `document-${document.uniqueFileId}`,
     document,
     document.mimeType || 'application/octet-stream',
-    (visible && autoLoad) || requested,
+    visible && useBlob,
   )
-  const preview = useMediaUrl(
+  const poster = useMediaUrl(
     telegram,
-    `document-preview-${thumbnail?.uniqueFileId ?? ''}`,
+    `document-poster-${thumbnail?.uniqueFileId ?? ''}`,
     thumbnail,
     'image/jpeg',
-    visible && image && !autoLoad,
+    visible && video,
   )
+  const streamUrl = streamedMediaUrl(
+    `document-${document.uniqueFileId}`,
+    document,
+    document.mimeType || 'application/octet-stream',
+    document.fileName,
+  )
+  const url = useBlob ? blob.data : streamUrl
+
+  if (video) {
+    const width = thumbnail?.width ?? 320
+    const height = thumbnail?.height ?? 180
+    return (
+      <div
+        ref={hostRef}
+        class="max-w-full"
+        style={{ width: `min(${width}px, 20rem)` }}
+      >
+        <video
+          class="block w-full rounded-lg bg-zinc-900 object-contain"
+          style={{ aspectRatio: `${width} / ${height}` }}
+          src={streamUrl}
+          poster={poster.data}
+          controls
+          playsInline
+          preload="metadata"
+        />
+        <MediaDownloadLink url={streamUrl} fileName={document.fileName || 'video.mp4'} />
+      </div>
+    )
+  }
 
   if (image) {
     const width = thumbnail?.width ?? 0
@@ -196,101 +209,52 @@ function DocumentView({ message, telegram }: { message: Message; telegram: Telef
     const style = width && height
       ? { width: `min(${width}px, 20rem)`, aspectRatio: `${width} / ${height}` }
       : { width: '20rem', aspectRatio: '1 / 1' }
-    const displayedUrl = url.data ?? preview.data
 
     return (
-      <div ref={hostRef} class="relative max-w-full overflow-hidden rounded-lg bg-zinc-900" style={style}>
-        {displayedUrl && <img class="size-full object-contain" src={displayedUrl} alt={document.fileName || 'Image'} decoding="async" />}
-        {url.data && <a href={url.data} target="_blank" rel="noopener noreferrer" class="absolute inset-0" aria-label="Open image" />}
-        {!autoLoad && !url.data && (
-          <button
-            type="button"
-            class="absolute inset-0 m-auto h-fit w-fit rounded-full bg-zinc-950/80 px-4 py-2 text-xs text-zinc-100 hover:bg-zinc-800 disabled:opacity-70"
-            disabled={url.isFetching}
-            onClick={() => url.isError ? void url.refetch() : setRequested(true)}
-          >
-            {url.isFetching ? 'Loading…' : loadLabel('image', document.fileSize)}
-          </button>
-        )}
+      <div ref={hostRef} class="max-w-full overflow-hidden rounded-lg bg-zinc-900" style={style}>
+        <a href={url} target="_blank" rel="noopener noreferrer" class="block size-full">
+          {visible && <img class="size-full object-contain" src={url} alt={document.fileName || 'Image'} decoding="async" />}
+        </a>
       </div>
     )
   }
 
-  if (url.data) {
-    return (
-      <a
-        href={url.data}
-        download={document.fileName ?? undefined}
-        class="flex max-w-full items-center gap-3 rounded-lg border border-zinc-700 bg-zinc-950/40 p-3 hover:bg-zinc-800/60"
-      >
-        <span class="grid size-10 shrink-0 place-items-center rounded-lg bg-zinc-800 text-lg">📄</span>
-        <span class="min-w-0">
-          <strong class="block truncate text-sm">{document.fileName || 'Document'}</strong>
-          <span class="text-xs text-zinc-500">{formatBytes(document.fileSize) || document.mimeType}</span>
-        </span>
-      </a>
-    )
-  }
-
   return (
-    <button
-      type="button"
-      class="flex max-w-full items-center gap-3 rounded-lg border border-zinc-700 bg-zinc-950/40 p-3 text-left hover:bg-zinc-800/60 disabled:opacity-70"
-      disabled={url.isFetching}
-      onClick={() => url.isError ? void url.refetch() : setRequested(true)}
+    <a
+      href={streamUrl}
+      download={document.fileName ?? undefined}
+      class="flex max-w-full items-center gap-3 rounded-lg border border-zinc-700 bg-zinc-950/40 p-3 hover:bg-zinc-800/60"
     >
       <span class="grid size-10 shrink-0 place-items-center rounded-lg bg-zinc-800 text-lg">📄</span>
       <span class="min-w-0">
-        <strong class="block truncate text-sm">{url.isFetching ? 'Loading…' : document.fileName || 'Document'}</strong>
+        <strong class="block truncate text-sm">{document.fileName || 'Document'}</strong>
         <span class="text-xs text-zinc-500">{formatBytes(document.fileSize) || document.mimeType}</span>
       </span>
-    </button>
+    </a>
   )
 }
 
-function AudioView({ message, telegram }: { message: Message; telegram: TelefastClient | null }) {
+function AudioView({ message }: { message: Message; telegram: TelefastClient | null }) {
   const audio = message.media as Extract<NonNullable<Message['media']>, { type: 'audio' }>
-  const [requested, setRequested] = useState(false)
-  const url = useMediaUrl(telegram, `audio-${audio.uniqueFileId}`, audio, audio.mimeType || 'audio/mpeg', requested)
+  const url = streamedMediaUrl(`audio-${audio.uniqueFileId}`, audio, audio.mimeType || 'audio/mpeg', audio.fileName)
 
   return (
     <div class="max-w-full">
       <p class="mb-1 truncate text-sm font-medium">{audio.title || audio.performer || 'Audio'}</p>
-      {url.data ? (
-        <audio class="max-w-full" src={url.data} controls preload="none" />
-      ) : (
-        <button
-          type="button"
-          class="rounded-full bg-zinc-900 px-3 py-1.5 text-xs text-zinc-300 hover:bg-zinc-800 disabled:opacity-70"
-          disabled={url.isFetching}
-          onClick={() => url.isError ? void url.refetch() : setRequested(true)}
-        >
-          {url.isFetching ? 'Loading…' : loadLabel('audio', audio.fileSize)}
-        </button>
-      )}
+      <audio class="max-w-full" src={url} controls preload="none" />
+      <MediaDownloadLink url={url} fileName={audio.fileName || 'audio.mp3'} />
     </div>
   )
 }
 
-function VoiceView({ message, telegram }: { message: Message; telegram: TelefastClient | null }) {
+function VoiceView({ message }: { message: Message; telegram: TelefastClient | null }) {
   const voice = message.media as Extract<NonNullable<Message['media']>, { type: 'voice' }>
-  const [requested, setRequested] = useState(false)
-  const url = useMediaUrl(telegram, `voice-${voice.uniqueFileId}`, voice, voice.mimeType || 'audio/ogg', requested)
+  const url = streamedMediaUrl(`voice-${voice.uniqueFileId}`, voice, voice.mimeType || 'audio/ogg', voice.fileName)
 
   return (
     <div class="max-w-full">
-      {url.data ? (
-        <audio class="max-w-full" src={url.data} controls preload="none" />
-      ) : (
-        <button
-          type="button"
-          class="rounded-full bg-zinc-900 px-3 py-1.5 text-xs text-zinc-300 hover:bg-zinc-800 disabled:opacity-70"
-          disabled={url.isFetching}
-          onClick={() => url.isError ? void url.refetch() : setRequested(true)}
-        >
-          {url.isFetching ? 'Loading…' : `${loadLabel('voice', voice.fileSize)} · ${Math.round(voice.duration)}s`}
-        </button>
-      )}
+      <audio class="max-w-full" src={url} controls preload="none" />
+      <MediaDownloadLink url={url} fileName={voice.fileName || 'voice.ogg'} />
     </div>
   )
 }

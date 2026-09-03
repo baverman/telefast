@@ -3,6 +3,7 @@ import { LocationProvider } from 'preact-iso'
 import { QueryClient, QueryClientProvider } from '@tanstack/preact-query'
 import { App } from './app'
 import './styles.css'
+import { initializeMediaStreaming } from './telegram/media-stream'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -10,6 +11,8 @@ const queryClient = new QueryClient({
     mutations: { retry: 0 },
   },
 })
+
+await initializeMediaStreaming()
 
 render(
   <LocationProvider>
