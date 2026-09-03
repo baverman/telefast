@@ -1,11 +1,11 @@
-import { useEffect, useRef, useState } from 'preact/hooks'
+import { useEffect, useRef } from 'preact/hooks'
 import { useLocation } from 'preact-iso'
 import type { Dialog, Message } from '@mtcute/web'
 import { useTelegram, isGroupPeer } from '../telegram/telegram-provider'
 import { useMessages } from '../telegram/queries'
 import { StickerView, timeLabel } from './media'
 import { MessageContent } from './message-content'
-import { ReactionBar, ReactionContextMenu } from './reaction-bar'
+import { ReactionBar } from './reaction-bar'
 
 export function MessageList({ peerId, dialog, threadId }: { peerId: string; dialog: Dialog; threadId?: number }) {
   const { client } = useTelegram()
@@ -41,7 +41,6 @@ export function MessageList({ peerId, dialog, threadId }: { peerId: string; dial
       console.error('[Telefast] Failed to open comments', error)
     }
   }
-  const [contextMenu, setContextMenu] = useState<{ message: Message; x: number; y: number } | null>(null)
 
   useEffect(() => {
     const container = containerRef.current
@@ -103,11 +102,6 @@ export function MessageList({ peerId, dialog, threadId }: { peerId: string; dial
           <article
             key={message.id}
             data-message-id={message.id}
-            onContextMenu={(event) => {
-              if (window.getSelection()?.toString()) return
-              event.preventDefault()
-              setContextMenu({ message, x: event.clientX, y: event.clientY })
-            }}
             class={message.isService
               ? 'message-service'
               : `group ${message.media?.type === 'sticker'
@@ -138,16 +132,6 @@ export function MessageList({ peerId, dialog, threadId }: { peerId: string; dial
             </div>
           </article>
         ))}
-        {contextMenu && (
-          <ReactionContextMenu
-            message={contextMenu.message}
-            threadId={threadId}
-            peerId={peerId}
-            x={contextMenu.x}
-            y={contextMenu.y}
-            onClose={() => setContextMenu(null)}
-          />
-        )}
       </div>
     </div>
   )

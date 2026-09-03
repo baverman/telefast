@@ -1,4 +1,7 @@
-/* global self, Response, MessageChannel, ReadableStream, Headers, URL, console */
+/* global self, Response, MessageChannel, ReadableStream, Headers, URL, console, importScripts, atob */
+importScripts('/media-range.js')
+const parseRange = globalThis.telefastParseMediaRange
+
 const MEDIA_PATH = '/__telefast_media__/'
 let nextMediaRequestId = 0
 
@@ -10,9 +13,17 @@ function describeError(error) {
   return { message: String(error) }
 }
 
+function decodeBase64Url(value) {
+  const base64 = value.replaceAll('-', '+').replaceAll('_', '/').padEnd(Math.ceil(value.length / 4) * 4, '=')
+  const binary = atob(base64)
+  const data = new Uint8Array(binary.length)
+  for (let index = 0; index < binary.length; index += 1) data[index] = binary.charCodeAt(index)
+  return data
+}
+
 async function findMediaClient(clientId) {
   const client = clientId ? await self.clients.get(clientId) : undefined
-  if (client) return client
+  if (client && !new URL(client.url).pathname.startsWith(MEDIA_PATH)) return client
   const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
   return windows.find((windowClient) => !new URL(windowClient.url).pathname.startsWith(MEDIA_PATH))
 }
@@ -36,28 +47,8 @@ self.addEventListener('unhandledrejection', (event) => {
   void forwardWorkerLog(undefined, 'worker', 'error', 'worker-unhandled-rejection', describeError(event.reason))
 })
 
-function parseRange(header, size) {
-  if (!header) return { start: 0, end: size == null ? undefined : size - 1, partial: false }
-  const match = /^bytes=(\d*)-(\d*)$/.exec(header)
-  if (!match || size == null) return null
 
-  let start
-  let end
-  if (!match[1]) {
-    const suffix = Number(match[2])
-    if (!Number.isSafeInteger(suffix) || suffix <= 0) return null
-    start = Math.max(0, size - suffix)
-    end = size - 1
-  } else {
-    start = Number(match[1])
-    end = match[2] ? Number(match[2]) : size - 1
-  }
-
-  if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < 0 || start >= size || end < start) return null
-  return { start, end: Math.min(end, size - 1), partial: true }
-}
-
-async function mediaResponse(request, url, clientId, requestId, fetchEvent, settleLifetime) {
+async function mediaResponse(request, url, clientId, requestId, settleLifetime) {
   const sizeParam = url.searchParams.get('size')
   const sizeValue = sizeParam == null ? NaN : Number(sizeParam)
   const size = Number.isSafeInteger(sizeValue) && sizeValue >= 0 ? sizeValue : undefined
@@ -81,7 +72,8 @@ async function mediaResponse(request, url, clientId, requestId, fetchEvent, sett
     return new Response('Telefast page is not available', { status: 503 })
   }
 
-  const id = decodeURIComponent(url.pathname.slice(MEDIA_PATH.length))
+  const location = decodeBase64Url(decodeURIComponent(url.pathname.slice(MEDIA_PATH.length)))
+  const locationBytes = location.byteLength
   const channel = new MessageChannel()
   const expectedLength = size == null ? undefined : (range.end ?? size - 1) - range.start + 1
   let receivedLength = 0
@@ -99,7 +91,7 @@ async function mediaResponse(request, url, clientId, requestId, fetchEvent, sett
     if (finished) return
     finished = true
     if (status === 'response-error') {
-      report('error', status, { id, received: receivedLength, expected: expectedLength, ...details })
+      report('error', status, { locationBytes, received: receivedLength, expected: expectedLength, ...details })
     }
     settleLifetime()
   }
@@ -115,10 +107,7 @@ async function mediaResponse(request, url, clientId, requestId, fetchEvent, sett
 
 
   const body = new ReadableStream({
-    pull(controller) {
-      let resolveWork = () => {}
-      const chunkWork = new Promise((resolve) => { resolveWork = resolve })
-
+    start(controller) {
       channel.port1.onmessage = (messageEvent) => {
         try {
           if (messageEvent.data?.type === 'chunk') {
@@ -137,40 +126,27 @@ async function mediaResponse(request, url, clientId, requestId, fetchEvent, sett
             }
             finish('response-complete')
             controller.close()
+            channel.port1.close()
           } else {
             throw new Error(messageEvent.data?.message || 'Telegram media download failed')
           }
         } catch (error) {
           fail(controller, error, 'port-message')
-        } finally {
-          resolveWork()
+          channel.port1.close()
         }
       }
       channel.port1.onmessageerror = () => {
         fail(controller, new Error('Telegram media MessagePort could not deserialize a message'), 'port-message-error')
-        resolveWork()
+        channel.port1.close()
       }
-
-      try {
-        channel.port1.postMessage({ type: 'pull' })
-      } catch (error) {
-        fail(controller, error, 'pull-post-message')
-        resolveWork()
-      }
-
-      try {
-        fetchEvent.waitUntil(chunkWork)
-      } catch (error) {
-        report('error', 'response-wait-until-error', { id, ...describeError(error) })
-      }
-      return chunkWork
+      channel.port1.start()
     },
     cancel(reason) {
       finish('response-cancel', { reason: reason == null ? undefined : String(reason) })
       try {
         channel.port1.postMessage({ type: 'cancel' })
       } catch (error) {
-        report('error', 'response-cancel-message-error', { id, ...describeError(error) })
+        report('error', 'response-cancel-message-error', { locationBytes, ...describeError(error) })
       }
       channel.port1.close()
     },
@@ -180,10 +156,12 @@ async function mediaResponse(request, url, clientId, requestId, fetchEvent, sett
     target.postMessage({
       type: 'telefast-media-request',
       requestId,
-      id,
+      location,
+      dcId: Number(url.searchParams.get('dc')) || undefined,
+      fileSize: size,
       start: range.start,
       end: range.end,
-    }, [channel.port2])
+    }, [location.buffer, channel.port2])
   } catch (error) {
     finish('response-error', { phase: 'request-post-message', ...describeError(error) })
     channel.port1.close()
@@ -217,7 +195,6 @@ self.addEventListener('fetch', (event) => {
     url,
     event.clientId,
     requestId,
-    event,
     settleLifetime,
   ).catch(async (error) => {
     settleLifetime()

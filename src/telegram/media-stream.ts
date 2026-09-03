@@ -1,21 +1,20 @@
-import type { FileLocation } from '@mtcute/web'
+import { type FileLocation, type tl } from '@mtcute/web'
+import { deserializeObject, serializeObject } from '@mtcute/web/utils.js'
 import type { TelefastClient } from '../telegram'
 
 const MEDIA_PATH = '/__telefast_media__/'
-const MEDIA_WORKER_VERSION = 7 // Increment for each media Service Worker update.
-const DOWNLOAD_ALIGNMENT = 1024 * 1024
-const DOWNLOAD_PART_SIZE_KB = 512
-const STREAM_BUFFER_SIZE = 2 * 1024 * 1024
+const MEDIA_WORKER_VERSION = 13 // Increment for each media Service Worker update.
+const DOWNLOAD_PART_SIZE_KB = 1024
+const DOWNLOAD_PART_SIZE = DOWNLOAD_PART_SIZE_KB * 1024
 
-interface MediaSource {
-  source: FileLocation
-  size?: number
-}
+type DownloadableMedia = FileLocation
 
 interface MediaRequest {
   type: 'telefast-media-request'
   requestId: string
-  id: string
+  location: Uint8Array
+  dcId?: number
+  fileSize?: number
   start: number
   end?: number
 }
@@ -30,7 +29,6 @@ interface MediaLog {
 
 type MediaWorkerMessage = MediaRequest | MediaLog
 
-const sources = new Map<string, MediaSource>()
 let client: TelefastClient | null = null
 let initialized = false
 
@@ -38,122 +36,121 @@ export function setMediaStreamClient(nextClient: TelefastClient | null) {
   client = nextClient
 }
 
+function encodeBase64Url(data: Uint8Array) {
+  let binary = ''
+  for (const byte of data) binary += String.fromCharCode(byte)
+  return btoa(binary).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, '')
+}
+
 export function streamedMediaUrl(
-  id: string,
-  source: FileLocation,
+  source: DownloadableMedia,
   mimeType: string,
   fileName?: string | null,
 ) {
-  sources.set(id, { source, size: source.fileSize })
+  const location = typeof source.location === 'function' ? source.location() : source.location
+  if (ArrayBuffer.isView(location)) throw new Error('Inline media cannot be streamed')
+
+  const serializedLocation = serializeObject(location)
   const query = new URLSearchParams({ mime: mimeType })
   if (source.fileSize != null) query.set('size', String(source.fileSize))
+  if (source.dcId != null) query.set('dc', String(source.dcId))
   if (fileName) query.set('name', fileName)
-  return `${MEDIA_PATH}${encodeURIComponent(id)}?${query}`
+  return `${MEDIA_PATH}${encodeBase64Url(serializedLocation)}?${query}`
 }
 
 async function serveMedia(request: MediaRequest, port: MessagePort) {
-  const media = sources.get(request.id)
   const telegram = client
-  const requestedLength = request.end == null ? undefined : request.end - request.start + 1
-  let readLength = 0
+  const end = request.end == null ? undefined : request.end + 1
+  const expectedLength = end == null ? undefined : end - request.start
+  const location = deserializeObject(request.location) as tl.TypeInputFileLocation | tl.TypeInputWebFileLocation
+  const abortController = new AbortController()
+  const alignedStart = Math.floor(request.start / DOWNLOAD_PART_SIZE) * DOWNLOAD_PART_SIZE
+  let sourceOffset = alignedStart
   let sentLength = 0
-  let finished = false
-  const finish = (status: 'source-complete' | 'source-cancel' | 'source-error', error?: unknown) => {
-    if (finished) return
-    finished = true
-    if (status !== 'source-error') return
-    console.error(`[Telefast media:${request.requestId}] ${status}`, {
-      id: request.id,
-      read: readLength,
-      sent: sentLength,
-      expected: requestedLength,
-      ...(error == null ? {} : { error }),
-    })
-  }
+  let cancelled = false
 
-  if (!media || !telegram) {
-    const error = 'Telegram media is not available'
-    finish('source-error', error)
-    port.postMessage({ type: 'error', message: error })
+  console.log(`[Telefast media:${request.requestId}] stream-request`, {
+    start: request.start,
+    end: request.end,
+    endExclusive: end,
+    alignedStart,
+    fileSize: request.fileSize,
+    expected: expectedLength,
+  })
+
+  port.addEventListener('message', (event) => {
+    if (event.data?.type !== 'cancel') return
+    cancelled = true
+    abortController.abort()
+    console.log(`[Telefast media:${request.requestId}] stream-cancel`, {
+      sourceOffset,
+      sent: sentLength,
+      expected: expectedLength,
+    })
+  })
+  port.start()
+
+  if (!telegram || end == null) {
+    const message = telegram ? 'Telegram media size is not available' : 'Telegram client is not available'
+    port.postMessage({ type: 'error', message })
     port.close()
     return
   }
 
-  const alignedStart = Math.floor(request.start / DOWNLOAD_ALIGNMENT) * DOWNLOAD_ALIGNMENT
-  const skipBytes = request.start - alignedStart
-  const stream = telegram.downloadAsStream(media.source, {
-    fileSize: media.size,
-    partSize: DOWNLOAD_PART_SIZE_KB,
-    offset: alignedStart,
-    highWaterMark: STREAM_BUFFER_SIZE,
-  })
-  const reader = stream.getReader()
-  let skip = skipBytes
-  let remaining = requestedLength ?? Infinity
-  let reading = false
-  let cancelled = false
+  try {
+    const chunks = telegram.downloadAsIterable(location, {
+      dcId: request.dcId,
+      fileSize: request.fileSize,
+      offset: alignedStart,
+      partSize: DOWNLOAD_PART_SIZE_KB,
+      abortSignal: abortController.signal,
+    })
 
-  port.addEventListener('message', (event) => {
-    if (event.data?.type === 'cancel') {
-      cancelled = true
-      finish('source-cancel')
-      void reader.cancel().finally(() => port.close())
-      return
-    }
-    if (event.data?.type !== 'pull' || reading) return
+    for await (const chunk of chunks) {
+      if (cancelled) break
 
-    reading = true
-    void (async () => {
-      try {
-        while (remaining > 0) {
-          const result = await reader.read()
-          if (result.done) {
-            if (cancelled) return
-            if (Number.isFinite(remaining)) {
-              throw new Error(`Telegram media ended after ${sentLength} of ${requestedLength} bytes`)
-            }
-            finish('source-complete')
-            port.postMessage({ type: 'done' })
-            port.close()
-            return
-          }
+      const chunkStart = sourceOffset
+      sourceOffset += chunk.byteLength
+      const trimStart = Math.max(0, request.start - chunkStart)
+      const trimEnd = Math.min(chunk.byteLength, end - chunkStart)
 
-          readLength += result.value.byteLength
-          let chunk = result.value
-          if (skip >= chunk.byteLength) {
-            skip -= chunk.byteLength
-            continue
-          }
-          if (skip > 0) {
-            chunk = chunk.slice(skip)
-            skip = 0
-          }
-          if (chunk.byteLength > remaining) chunk = chunk.slice(0, remaining)
-          remaining -= chunk.byteLength
-          sentLength += chunk.byteLength
-          const payload = chunk.slice()
-          port.postMessage({ type: 'chunk', chunk: payload }, [payload.buffer])
-          return
-        }
-
-        await reader.cancel()
-        finish('source-complete')
-        port.postMessage({ type: 'done' })
-        port.close()
-      } catch (error) {
-        if (cancelled) return
-        finish('source-error', error)
-        port.postMessage({
-          type: 'error',
-          message: error instanceof Error ? error.message : String(error),
-        })
-        port.close()
-      } finally {
-        reading = false
+      if (trimEnd > trimStart) {
+        const payload = chunk.slice(trimStart, trimEnd)
+        sentLength += payload.byteLength
+        port.postMessage({ type: 'chunk', chunk: payload }, [payload.buffer])
       }
-    })()
-  })
-  port.start()
+
+
+      if (sourceOffset >= end) break
+    }
+
+    if (!cancelled && sentLength !== expectedLength) {
+      throw new Error(`Telegram media ended after ${sentLength} of ${expectedLength} bytes`)
+    }
+    if (!cancelled) {
+      console.log(`[Telefast media:${request.requestId}] stream-complete`, {
+        sourceOffset,
+        sent: sentLength,
+        expected: expectedLength,
+      })
+      port.postMessage({ type: 'done' })
+    }
+  } catch (error) {
+    if (!cancelled) {
+      console.error(`[Telefast media:${request.requestId}] source-error`, {
+        location: location._,
+        sent: sentLength,
+        expected: expectedLength,
+        error,
+      })
+      port.postMessage({
+        type: 'error',
+        message: error instanceof Error ? error.message : String(error),
+      })
+    }
+  } finally {
+    port.close()
+  }
 }
 
 export async function initializeMediaStreaming() {
@@ -180,15 +177,11 @@ export async function initializeMediaStreaming() {
       await new Promise<void>((resolve) => {
         const onControllerChange = () => {
           if (navigator.serviceWorker.controller?.scriptURL !== expectedScriptUrl) return
-          window.clearTimeout(timeout)
           navigator.serviceWorker.removeEventListener('controllerchange', onControllerChange)
           resolve()
         }
-        const timeout = window.setTimeout(() => {
-          navigator.serviceWorker.removeEventListener('controllerchange', onControllerChange)
-          resolve()
-        }, 3000)
         navigator.serviceWorker.addEventListener('controllerchange', onControllerChange)
+        onControllerChange()
       })
     }
   } catch (error) {

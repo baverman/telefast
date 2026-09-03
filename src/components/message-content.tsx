@@ -36,12 +36,13 @@ function MediaDownloadLink({ url, fileName }: { url: string; fileName: string })
     <a
       href={url}
       download={fileName}
-      class="mt-2 inline-flex rounded-full bg-zinc-900 px-3 py-1.5 text-xs text-zinc-300 hover:bg-zinc-800"
+      class="inline-flex rounded-full bg-zinc-900 px-3 py-1.5 text-xs text-zinc-300 hover:bg-zinc-800"
     >
       ↓ Download
     </a>
   )
 }
+
 
 
 function serviceMessageText(action: MessageAction | null, sender: string) {
@@ -80,7 +81,7 @@ function PhotoView({ message, telegram }: { message: Message; telegram: Telefast
     'image/jpeg',
     visible && useBlob,
   )
-  const streamUrl = streamedMediaUrl(`photo-${source.uniqueFileId}`, source, 'image/jpeg')
+  const streamUrl = streamedMediaUrl(source, 'image/jpeg')
   const url = useBlob ? blob.data : streamUrl
 
   return (
@@ -96,7 +97,7 @@ function PhotoView({ message, telegram }: { message: Message; telegram: Telefast
   )
 }
 
-function VideoView({ message, telegram, gif }: { message: Message; telegram: TelefastClient | null; gif: boolean }) {
+function VideoView({ message, telegram }: { message: Message; telegram: TelefastClient | null }) {
   const video = message.media as Extract<NonNullable<Message['media']>, { type: 'video' }>
   const hostRef = useRef<HTMLDivElement | null>(null)
   const visible = useVisible(hostRef, '240px')
@@ -109,11 +110,11 @@ function VideoView({ message, telegram, gif }: { message: Message; telegram: Tel
     visible,
   )
   const url = streamedMediaUrl(
-    `video-${video.uniqueFileId}`,
     video,
     video.mimeType || 'video/mp4',
     video.fileName,
   )
+  const fileName = video.fileName || (video.isAnimation ? 'animation.mp4' : 'video.mp4')
 
   return (
     <div
@@ -126,14 +127,14 @@ function VideoView({ message, telegram, gif }: { message: Message; telegram: Tel
         style={{ aspectRatio: `${video.width} / ${video.height}` }}
         src={url}
         poster={poster.data}
-        controls={!gif}
-        autoPlay={gif}
-        loop={gif}
-        muted={gif}
+        controls={!video.isAnimation}
+        autoPlay={video.isAnimation}
+        loop={video.isAnimation}
+        muted={video.isAnimation}
         playsInline
-        preload={gif ? 'auto' : 'metadata'}
+        preload={video.isAnimation ? 'auto' : 'metadata'}
       />
-      <MediaDownloadLink url={url} fileName={video.fileName || (gif ? 'animation.mp4' : 'video.mp4')} />
+      <div class="mt-2"><MediaDownloadLink url={url} fileName={fileName} /></div>
     </div>
   )
 }
@@ -173,7 +174,6 @@ function DocumentView({ message, telegram }: { message: Message; telegram: Telef
     visible && video,
   )
   const streamUrl = streamedMediaUrl(
-    `document-${document.uniqueFileId}`,
     document,
     document.mimeType || 'application/octet-stream',
     document.fileName,
@@ -183,6 +183,7 @@ function DocumentView({ message, telegram }: { message: Message; telegram: Telef
   if (video) {
     const width = thumbnail?.width ?? 320
     const height = thumbnail?.height ?? 180
+    const fileName = document.fileName || 'video.mp4'
     return (
       <div
         ref={hostRef}
@@ -198,7 +199,7 @@ function DocumentView({ message, telegram }: { message: Message; telegram: Telef
           playsInline
           preload="metadata"
         />
-        <MediaDownloadLink url={streamUrl} fileName={document.fileName || 'video.mp4'} />
+        <div class="mt-2"><MediaDownloadLink url={streamUrl} fileName={fileName} /></div>
       </div>
     )
   }
@@ -236,7 +237,7 @@ function DocumentView({ message, telegram }: { message: Message; telegram: Telef
 
 function AudioView({ message }: { message: Message; telegram: TelefastClient | null }) {
   const audio = message.media as Extract<NonNullable<Message['media']>, { type: 'audio' }>
-  const url = streamedMediaUrl(`audio-${audio.uniqueFileId}`, audio, audio.mimeType || 'audio/mpeg', audio.fileName)
+  const url = streamedMediaUrl(audio, audio.mimeType || 'audio/mpeg', audio.fileName)
 
   return (
     <div class="max-w-full">
@@ -249,7 +250,7 @@ function AudioView({ message }: { message: Message; telegram: TelefastClient | n
 
 function VoiceView({ message }: { message: Message; telegram: TelefastClient | null }) {
   const voice = message.media as Extract<NonNullable<Message['media']>, { type: 'voice' }>
-  const url = streamedMediaUrl(`voice-${voice.uniqueFileId}`, voice, voice.mimeType || 'audio/ogg', voice.fileName)
+  const url = streamedMediaUrl(voice, voice.mimeType || 'audio/ogg', voice.fileName)
 
   return (
     <div class="max-w-full">
@@ -276,7 +277,7 @@ function ContactView({ message }: { message: Message }) {
 function MediaBlock({ message, telegram }: { message: Message; telegram: TelefastClient | null }) {
   switch (message.media?.type) {
     case 'photo': return <PhotoView message={message} telegram={telegram} />
-    case 'video': return <VideoView message={message} telegram={telegram} gif={message.media.isAnimation} />
+    case 'video': return <VideoView message={message} telegram={telegram} />
     case 'document': return <DocumentView message={message} telegram={telegram} />
     case 'audio': return <AudioView message={message} telegram={telegram} />
     case 'voice': return <VoiceView message={message} telegram={telegram} />
