@@ -15,6 +15,11 @@ function normalizeEmoji(value: string) {
   return value.replace(/[\uFE0E\uFE0F]/g, '')
 }
 
+function stickerTitle(emoji: string, keywords: Map<string, string>) {
+  const terms = keywords.get(normalizeEmoji(emoji))
+  return [emoji, terms].filter(Boolean).join(' — ') || 'Sticker'
+}
+
 export function StickerPicker({ peerId, onSent }: { peerId: string; onSent: () => void }) {
   const { client } = useTelegram()
   const stickersQuery = useStickers()
@@ -35,13 +40,23 @@ export function StickerPicker({ peerId, onSent }: { peerId: string; onSent: () =
   }, [search])
 
   useEffect(() => {
-    if (debouncedSearch.trim().length < 3 || emojiSearchData) return
+    if (emojiSearchData) return
     let active = true
     void import('emojibase-data/en/compact.json').then(({ default: data }) => {
       if (active) setEmojiSearchData(data)
     })
     return () => { active = false }
-  }, [debouncedSearch, emojiSearchData])
+  }, [emojiSearchData])
+
+  const emojiKeywords = useMemo(() => {
+    const keywords = new Map<string, string>()
+    for (const entry of emojiSearchData ?? []) {
+      const terms = [...new Set([entry.label, ...(entry.tags ?? [])])].join(', ')
+      keywords.set(normalizeEmoji(entry.unicode), terms)
+      for (const skin of entry.skins ?? []) keywords.set(normalizeEmoji(skin.unicode), terms)
+    }
+    return keywords
+  }, [emojiSearchData])
 
   const stickers = useMemo(() => {
     const query = debouncedSearch.trim().length >= 3 ? debouncedSearch.trim().toLowerCase() : ''
@@ -122,7 +137,7 @@ export function StickerPicker({ peerId, onSent }: { peerId: string; onSent: () =
                 style={{ aspectRatio: `${sticker.width} / ${sticker.height}` }}
                 type="button"
                 disabled={sendSticker.isPending}
-                title={`Send ${sticker.emoji || 'sticker'}`}
+                title={stickerTitle(sticker.emoji, emojiKeywords)}
                 onMouseEnter={() => setAnimatedStickerId(sticker.uniqueFileId)}
                 onMouseLeave={() => setAnimatedStickerId(null)}
                 onFocus={() => setAnimatedStickerId(sticker.uniqueFileId)}
