@@ -173,7 +173,13 @@ export function MessageList({
               </button>
             )}
             {isGroupPeer(dialog.peer) && !message.isOutgoing && (
-              <p class="mb-1 text-xs font-medium text-sky-300">{message.sender.displayName}</p>
+              <a
+                href={`/chat/${encodeURIComponent(String(message.sender.id))}/info`}
+                class="mb-1 block w-fit text-xs font-medium text-sky-300 underline-offset-2 hover:underline"
+                title={`Open information about ${message.sender.displayName}`}
+              >
+                {message.sender.displayName}
+              </a>
             )}
             {!message.isService && <MessageMetadata message={message} telegram={client} />}
             {message.media?.type === 'sticker' ? (

@@ -1,32 +1,52 @@
-import type { Dialog } from '@mtcute/web'
+import { useEffect } from 'preact/hooks'
+import { useLocation } from 'preact-iso'
 import { useTelegram } from '../telegram/telegram-provider'
+import { useDialog } from '../telegram/queries'
+import { setActiveChatPeerId } from '../telegram/active-chat'
 import { canSendMessages } from '../telegram/model'
 import { Avatar } from './media'
 import { MessageList } from './message-list'
 import { MessageComposer } from './message-composer'
 
-export function Conversation({
-  peerId,
-  dialog,
-  threadId,
-  targetMessageId,
-}: {
-  peerId: string
-  dialog: Dialog
-  threadId?: number
-  targetMessageId?: number
-}) {
-  const { client } = useTelegram()
+export function Conversation({ peerId }: { peerId: string }) {
+  const location = useLocation()
+  const { client, markRead } = useTelegram()
+  const selected = useDialog(peerId)
+  const dialog = selected.data
+  const threadId = Number.isSafeInteger(Number(location.query.thread)) ? Number(location.query.thread) : undefined
+  const targetMessageId = Number.isSafeInteger(Number(location.query.message)) ? Number(location.query.message) : undefined
+  const infoQuery = new URLSearchParams()
+  if (threadId != null) infoQuery.set('thread', String(threadId))
+  const infoHref = `/chat/${encodeURIComponent(peerId)}/info${infoQuery.size ? `?${infoQuery}` : ''}`
+
+  useEffect(() => {
+    setActiveChatPeerId(peerId)
+    return () => setActiveChatPeerId(null)
+  }, [peerId])
+
+  useEffect(() => {
+    if (!dialog?.unreadCount) return
+    if (document.visibilityState !== 'visible' || !document.hasFocus()) return
+    void markRead(peerId)
+  }, [peerId, dialog?.unreadCount])
+
+  if (!dialog) return <EmptyConversation message={selected.isError ? 'Chat not found' : 'Loading chat…'} />
   return (
     <section class="flex min-w-0 flex-1 flex-col bg-chat">
       <header class="flex h-16 shrink-0 items-center gap-3 border-b border-zinc-800 bg-zinc-900/90 px-4 backdrop-blur">
         <a class="icon-button md:hidden" href="/chat" aria-label="Back to chats">←</a>
-        <Avatar
-          peer={dialog.peer}
-          telegram={client}
-          className="grid size-9 shrink-0 place-items-center rounded-full bg-gradient-to-br from-sky-500 to-indigo-500 text-xs font-semibold"
-        />
-        <strong class="truncate text-sm font-medium">{dialog.peer.displayName}</strong>
+        <a
+          href={infoHref}
+          class="flex min-w-0 items-center gap-3 rounded-lg hover:text-sky-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-500"
+          aria-label={`Open information about ${dialog.peer.displayName}`}
+        >
+          <Avatar
+            peer={dialog.peer}
+            telegram={client}
+            className="grid size-9 shrink-0 place-items-center rounded-full bg-gradient-to-br from-sky-500 to-indigo-500 text-xs font-semibold"
+          />
+          <strong class="truncate text-sm font-medium">{dialog.peer.displayName}</strong>
+        </a>
       </header>
       <MessageList peerId={peerId} dialog={dialog} threadId={threadId} targetMessageId={targetMessageId} />
       {canSendMessages(dialog.peer)

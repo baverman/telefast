@@ -17,7 +17,8 @@ export function App() {
       <Router>
         <Route path="/login" component={LoginPage} />
         <Route path="/" component={HomeRedirect} />
-        <Route path="/chat/:peerId?" component={ChatLayout} />
+        <Route path="/chat" component={ChatLayout} />
+        <Route path="/chat/*" component={ChatLayout} />
         <Route default component={NotFoundPage} />
       </Router>
     </TelegramProvider>
