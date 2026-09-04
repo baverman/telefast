@@ -30,12 +30,14 @@ export function MessageList({
   threadId,
   targetMessageId,
   onReply,
+  onEdit,
 }: {
   peerId: string
   dialog: Dialog
   threadId?: number
   targetMessageId?: number
   onReply: (reply: MessageReplyTarget) => void
+  onEdit: (message: Message) => void
 }) {
   const { client } = useTelegram()
   const location = useLocation()
@@ -237,6 +239,7 @@ export function MessageList({
             y={reactionMenu.y}
             placement={reactionMenu.placement}
             onReply={onReply}
+            onEdit={onEdit}
             onClose={() => setReactionMenu(null)}
           />
         )}

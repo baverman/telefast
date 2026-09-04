@@ -223,6 +223,20 @@ export function useSendReaction(peerId: string, threadId?: number) {
   })
 }
 
+export function useEditMessage(peerId: string, threadId?: number) {
+  const { client } = useTelegram()
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ message, text }: { message: import('@mtcute/web').Message; text: string }) => (
+      client!.editMessage({ message, text: text.trim() })
+    ),
+    onSuccess: (message) => {
+      upsertMessage(queryClient, peerId, message, threadId)
+      void queryClient.invalidateQueries({ queryKey: telegramKeys.dialogs() })
+    },
+  })
+}
+
 export function useDeleteMessage(peerId: string, threadId?: number) {
   const { client } = useTelegram()
   const queryClient = useQueryClient()

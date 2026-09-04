@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'preact/hooks'
 import { useLocation } from 'preact-iso'
+import type { Message } from '@mtcute/web'
 import { useTelegram } from '../telegram/telegram-provider'
 import { useDialog, type MessageReplyTarget } from '../telegram/queries'
 import { setActiveChatPeerId } from '../telegram/active-chat'
@@ -14,6 +15,7 @@ export function Conversation({ peerId }: { peerId: string }) {
   const selected = useDialog(peerId)
   const dialog = selected.data
   const [reply, setReply] = useState<MessageReplyTarget | null>(null)
+  const [edit, setEdit] = useState<Message | null>(null)
   const threadId = Number.isSafeInteger(Number(location.query.thread)) ? Number(location.query.thread) : undefined
   const targetMessageId = Number.isSafeInteger(Number(location.query.message)) ? Number(location.query.message) : undefined
   const infoQuery = new URLSearchParams()
@@ -25,7 +27,7 @@ export function Conversation({ peerId }: { peerId: string }) {
     return () => setActiveChatPeerId(null)
   }, [peerId])
 
-  useEffect(() => setReply(null), [peerId])
+  useEffect(() => { setReply(null); setEdit(null) }, [peerId])
 
   useEffect(() => {
     if (!dialog?.unreadCount) return
@@ -56,10 +58,20 @@ export function Conversation({ peerId }: { peerId: string }) {
         dialog={dialog}
         threadId={threadId}
         targetMessageId={targetMessageId}
-        onReply={setReply}
+        onReply={(target) => { setEdit(null); setReply(target) }}
+        onEdit={(message) => { setReply(null); setEdit(message) }}
       />
       {canSendMessages(dialog.peer)
-        ? <MessageComposer peerId={peerId} threadId={threadId} reply={reply} onCancelReply={() => setReply(null)} />
+        ? (
+          <MessageComposer
+            peerId={peerId}
+            threadId={threadId}
+            reply={reply}
+            edit={edit}
+            onReplyChange={(target) => { setEdit(null); setReply(target) }}
+            onEditChange={(message) => { setReply(null); setEdit(message) }}
+          />
+        )
         : (
           <div class="shrink-0 border-t border-zinc-800 bg-zinc-900 p-4 text-center text-sm text-zinc-500">
             You can't send messages here

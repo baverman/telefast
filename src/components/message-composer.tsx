@@ -1,25 +1,33 @@
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks'
-import { useBotCommands, useMessages, useSendText, type MessageReplyTarget } from '../telegram/queries'
+import type { Message } from '@mtcute/web'
+import { useBotCommands, useEditMessage, useMessages, useSendText, type MessageReplyTarget } from '../telegram/queries'
 import { StickerPicker } from './sticker-picker'
 
 export function MessageComposer({
   peerId,
   threadId,
   reply,
-  onCancelReply,
+  edit,
+  onReplyChange,
+  onEditChange,
 }: {
   peerId: string
   threadId?: number
   reply: MessageReplyTarget | null
-  onCancelReply: () => void
+  edit: Message | null
+  onReplyChange: (reply: MessageReplyTarget | null) => void
+  onEditChange: (message: Message | null) => void
 }) {
   const sendText = useSendText(peerId, threadId)
+  const editMessage = useEditMessage(peerId, threadId)
   const commandsQuery = useBotCommands(peerId)
   const history = useMessages(peerId, threadId)
   const [drafts, setDrafts] = useState<Record<string, string>>({})
   const draft = drafts[peerId] ?? ''
   const setDraft = (value: string) => setDrafts((current) => ({ ...current, [peerId]: value }))
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
+  const editDraftRef = useRef('')
+  const editingIdRef = useRef<number | null>(null)
   const [pickerOpen, setPickerOpen] = useState(false)
   const [activeIndex, setActiveIndex] = useState(0)
   const [hiddenQuery, setHiddenQuery] = useState<string | null>(null)
@@ -36,6 +44,21 @@ export function MessageComposer({
   useEffect(() => {
     if (reply) inputRef.current?.focus()
   }, [reply])
+
+  useEffect(() => {
+    if (edit) {
+      if (editingIdRef.current == null) editDraftRef.current = draft
+      editingIdRef.current = edit.id
+      setDraft(edit.text)
+      requestAnimationFrame(() => {
+        inputRef.current?.focus()
+        inputRef.current?.select()
+      })
+    } else if (editingIdRef.current != null) {
+      editingIdRef.current = null
+      setDraft(editDraftRef.current)
+    }
+  }, [edit])
   useEffect(() => {
     if (!pickerOpen) return
     const close = (event: KeyboardEvent) => {
@@ -76,14 +99,27 @@ export function MessageComposer({
     setActiveIndex(0)
   }
 
+  function cancelEdit() {
+    editingIdRef.current = null
+    setDraft(editDraftRef.current)
+    onEditChange(null)
+  }
+
   async function submit(event: SubmitEvent) {
     event.preventDefault()
     if (!draft.trim()) return
     const text = draft.trim()
     setDraft('')
     try {
-      await sendText.mutateAsync({ text, reply: reply ?? undefined })
-      onCancelReply()
+      if (edit) {
+        await editMessage.mutateAsync({ message: edit, text })
+        editingIdRef.current = null
+        setDraft(editDraftRef.current)
+        onEditChange(null)
+      } else {
+        await sendText.mutateAsync({ text, reply: reply ?? undefined })
+        onReplyChange(null)
+      }
     } catch {
       setDraft(text)
     }
@@ -92,15 +128,22 @@ export function MessageComposer({
   return (
     <form class="relative shrink-0 border-t border-zinc-800 bg-zinc-900 p-3 md:px-6" onSubmit={submit}>
       {pickerOpen && <StickerPicker peerId={peerId} onSent={() => setPickerOpen(false)} />}
-      {reply && (
+      {(edit || reply) && (
         <div class="mx-auto mb-2 flex max-w-3xl items-center gap-3 rounded-xl border-l-2 border-sky-400 bg-zinc-800 px-3 py-2">
           <div class="min-w-0 flex-1">
             <p class="truncate text-xs font-medium text-sky-300">
-              {reply.quote ? 'Reply to selection' : `Reply to ${reply.message.sender.displayName}`}
+              {edit ? 'Edit message' : reply?.quote ? 'Reply to selection' : `Reply to ${reply?.message.sender.displayName}`}
             </p>
-            <p class="truncate text-xs text-zinc-400">{reply.quote?.text || reply.message.text || 'Attachment'}</p>
+            <p class="truncate text-xs text-zinc-400">
+              {edit?.text || reply?.quote?.text || reply?.message.text || 'Attachment'}
+            </p>
           </div>
-          <button type="button" class="icon-button size-7" onClick={onCancelReply} aria-label="Cancel reply">×</button>
+          <button
+            type="button"
+            class="icon-button size-7"
+            onClick={edit ? cancelEdit : () => onReplyChange(null)}
+            aria-label={edit ? 'Cancel edit' : 'Cancel reply'}
+          >×</button>
         </div>
       )}
       {showMenu && matches.length > 0 && (
@@ -136,6 +179,19 @@ export function MessageComposer({
           value={draft}
           onInput={(event) => setDraft(event.currentTarget.value)}
           onKeyDown={(event) => {
+            if (event.key === 'ArrowUp' && !draft && !reply && !edit) {
+              const lastOutgoing = [...history.messages].reverse().find((message) => message.isOutgoing && Boolean(message.text))
+              if (lastOutgoing) {
+                event.preventDefault()
+                onEditChange(lastOutgoing)
+                return
+              }
+            }
+            if (event.key === 'Escape' && edit) {
+              event.preventDefault()
+              cancelEdit()
+              return
+            }
             if (showMenu && matches.length > 0) {
               if (event.key === 'ArrowDown') {
                 event.preventDefault()
@@ -167,10 +223,10 @@ export function MessageComposer({
         />
         <button
           class="grid size-11 shrink-0 place-items-center rounded-full bg-sky-500 font-bold text-white transition hover:bg-sky-400 disabled:opacity-40"
-          disabled={!draft.trim() || sendText.isPending}
+          disabled={!draft.trim() || sendText.isPending || editMessage.isPending}
           type="submit"
-          aria-label="Send message"
-        >↑</button>
+          aria-label={edit ? 'Save edit' : 'Send message'}
+        >{edit ? '✓' : '↑'}</button>
       </div>
     </form>
   )

@@ -47,6 +47,7 @@ export function MessageContextMenu({
          y,
          placement,
          onReply,
+         onEdit,
          onClose,
        }: {
          message: Message
@@ -57,6 +58,7 @@ export function MessageContextMenu({
          y: number
          placement: 'above' | 'below'
          onReply: (reply: MessageReplyTarget) => void
+         onEdit: (message: Message) => void
          onClose: () => void
        }) {
          const [view, setView] = useState<'menu' | 'forward' | 'delete'>('menu')
@@ -118,6 +120,7 @@ export function MessageContextMenu({
                    })}
                  </div>
                  {action('Reply', () => { onReply({ message, quote }); onClose() })}
+                 {action('Edit', () => { onEdit(message); onClose() }, !message.isOutgoing || !message.text)}
                  {action('Forward…', () => setView('forward'), !message.canBeForwarded)}
                  {action('Delete…', () => setView('delete'), false, true)}
                </div>
