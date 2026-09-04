@@ -164,7 +164,7 @@ export function MessageComposer({
           </div>
         </div>
       )}
-      <div class="mx-auto flex max-w-3xl items-end gap-2">
+      <div class="mx-auto flex max-w-3xl items-center gap-2">
         <button
           class={`grid size-11 shrink-0 place-items-center rounded-full border text-lg transition ${pickerOpen ? 'border-sky-500 bg-sky-500/15' : 'border-zinc-700 bg-zinc-800 hover:bg-zinc-700'}`}
           type="button"

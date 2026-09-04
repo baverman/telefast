@@ -3,7 +3,7 @@ import { useLocation } from 'preact-iso'
 import type { Dialog, Message } from '@mtcute/web'
 import { useTelegram, isGroupPeer } from '../telegram/telegram-provider'
 import { useMessages, type MessageReplyTarget } from '../telegram/queries'
-import { StickerView, timeLabel } from './media'
+import { Avatar, StickerView, timeLabel } from './media'
 import { MessageContent } from './message-content'
 import { ReactionBar, MessageContextMenu } from './reaction-bar'
 import { MessageMetadata } from './message-metadata'
@@ -166,6 +166,20 @@ export function MessageList({
                   : `message-bubble ${message.isOutgoing ? 'message-out' : 'message-in'}`}`
             }
           >
+            {isGroupPeer(dialog.peer) && !message.isService && (
+              <a
+                href={`/chat/${encodeURIComponent(String(message.sender.id))}/info`}
+                class={`absolute top-0 ${message.isOutgoing ? '-right-11' : '-left-11'}`}
+                title={`Open information about ${message.sender.displayName}`}
+                aria-label={`Open information about ${message.sender.displayName}`}
+              >
+                <Avatar
+                  peer={message.sender}
+                  telegram={client}
+                  className="grid size-8 place-items-center rounded-full bg-gradient-to-br from-sky-500 to-indigo-500 text-[10px] font-semibold text-white"
+                />
+              </a>
+            )}
             {!message.isService && (
               <button
                 type="button"
