@@ -5,7 +5,7 @@ import { useTelegram } from '../telegram/telegram-provider'
 export function LoginPage() {
   const {
     status, authStep, passwordHint, deliveryLabel, busy, error,
-    beginLogin, submitCode, submitPassword,
+    beginLogin, submitCode, submitPassword, reconnect,
   } = useTelegram()
   const [apiId, setApiId] = useState(localStorage.getItem('telefast.apiId') ?? '')
   const [apiHash, setApiHash] = useState(localStorage.getItem('telefast.apiHash') ?? '')
@@ -16,6 +16,7 @@ export function LoginPage() {
 
   if (status === 'authenticated') return <Redirect to="/chat" />
   if (status === 'loading') return <ConnectionScreen />
+  if (status === 'disconnected') return <ConnectionScreen error={error} onRetry={() => void reconnect()} />
 
   function start(event: SubmitEvent) {
     event.preventDefault()
@@ -90,10 +91,22 @@ export function LoginPage() {
   )
 }
 
-export function ConnectionScreen() {
+export function ConnectionScreen({ error, onRetry }: { error?: string; onRetry?: () => void }) {
   return (
-    <main class="grid min-h-screen place-items-center bg-zinc-950 text-zinc-100">
-      <div class="flex items-center gap-3 text-sm text-zinc-400"><span class="loader" /> Connecting to Telegram</div>
+    <main class="grid min-h-screen place-items-center bg-zinc-950 px-5 text-zinc-100">
+      <div class="flex max-w-md flex-col items-center gap-4 text-center">
+        {onRetry ? (
+          <>
+            <p class="text-sm font-medium">Unable to connect to Telegram</p>
+            {error && <p role="alert" class="text-xs text-zinc-400">{error}</p>}
+            <button type="button" class="primary-button px-6" onClick={onRetry}>Retry</button>
+          </>
+        ) : (
+          <div class="flex items-center gap-3 text-sm text-zinc-400">
+            <span class="loader" /> Connecting to Telegram
+          </div>
+        )}
+      </div>
     </main>
   )
 }

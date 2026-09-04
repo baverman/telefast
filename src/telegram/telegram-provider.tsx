@@ -17,7 +17,7 @@ const STORAGE = {
 }
 
 export type AuthStep = 'credentials' | 'code' | 'password'
-export type SessionStatus = 'loading' | 'unauthenticated' | 'authenticated'
+export type SessionStatus = 'loading' | 'unauthenticated' | 'authenticated' | 'disconnected'
 type Resolver = (value: string) => void
 type Connection = ReturnType<typeof createTelegramConnection>
 
@@ -40,6 +40,7 @@ interface TelegramContextValue {
   submitCode(code: string): void
   submitPassword(password: string): void
   logout(): Promise<void>
+  reconnect(): Promise<void>
   clearError(): void
   enableNotifications(): Promise<void>
   markRead(peerId: string): Promise<void>
@@ -58,6 +59,25 @@ function errorText(error: unknown) {
 function reportError(context: string, error: unknown) {
   console.error(`[Telefast] ${context}`, error)
   return errorText(error)
+}
+
+const INVALID_SESSION_ERRORS = new Set([
+  'AUTH_KEY_DUPLICATED',
+  'AUTH_KEY_INVALID',
+  'AUTH_KEY_PERM_EMPTY',
+  'AUTH_KEY_UNREGISTERED',
+  'SESSION_EXPIRED',
+  'SESSION_REVOKED',
+  'USER_DEACTIVATED',
+  'USER_DEACTIVATED_BAN',
+])
+
+function isInvalidSessionError(error: unknown) {
+  if (!error || typeof error !== 'object') return false
+  const text = 'text' in error && typeof error.text === 'string'
+    ? error.text
+    : error instanceof Error ? error.message : ''
+  return INVALID_SESSION_ERRORS.has(text)
 }
 
 function codeDeliveryLabel(sentCode: SentCode) {
@@ -181,7 +201,7 @@ export function TelegramProvider({ children }: { children: ComponentChildren }) 
         connectionRef.current = null
       }
       setError(reportError('Failed to restore Telegram connection', recoveryError))
-      setStatus('unauthenticated')
+      setStatus(isInvalidSessionError(recoveryError) ? 'unauthenticated' : 'disconnected')
     } finally {
       recoveringConnectionRef.current = false
     }
@@ -214,14 +234,50 @@ export function TelegramProvider({ children }: { children: ComponentChildren }) 
           return
         }
         enterChats(connection)
-      } catch {
+      } catch (startupError) {
         await connection.destroy()
         connectionRef.current = null
-        if (!cancelled) setStatus('unauthenticated')
+        if (!cancelled) {
+          setError(reportError('Failed to connect to Telegram', startupError))
+          setStatus(isInvalidSessionError(startupError) ? 'unauthenticated' : 'disconnected')
+        }
       }
     })()
     return () => { cancelled = true }
   }, [])
+
+  async function reconnect() {
+    if (recoveringConnectionRef.current) return
+
+    const storedApiId = localStorage.getItem(STORAGE.apiId)
+    const storedApiHash = localStorage.getItem(STORAGE.apiHash)
+    if (!storedApiId || !storedApiHash) {
+      setStatus('unauthenticated')
+      return
+    }
+
+    recoveringConnectionRef.current = true
+    setStatus('loading')
+    setError('')
+    const connection = createTelegramConnection(Number(storedApiId), storedApiHash)
+    connectionRef.current = connection
+    try {
+      await connection.client.start({})
+      if (connectionRef.current !== connection) {
+        await connection.destroy()
+        return
+      }
+      enterChats(connection)
+      await queryClient.invalidateQueries({ queryKey: telegramKeys.all })
+    } catch (connectionError) {
+      await connection.destroy().catch(() => undefined)
+      if (connectionRef.current === connection) connectionRef.current = null
+      setError(reportError('Failed to connect to Telegram', connectionError))
+      setStatus(isInvalidSessionError(connectionError) ? 'unauthenticated' : 'disconnected')
+    } finally {
+      recoveringConnectionRef.current = false
+    }
+  }
 
   async function beginLogin(input: BeginLoginInput) {
     setError('')
@@ -323,7 +379,7 @@ export function TelegramProvider({ children }: { children: ComponentChildren }) 
 
   const value: TelegramContextValue = {
     status, authStep, passwordHint, deliveryLabel, busy, error, client,
-    notificationPermission, beginLogin, submitCode, submitPassword, logout,
+    notificationPermission, beginLogin, submitCode, submitPassword, logout, reconnect,
     clearError: () => setError(''), enableNotifications, markRead,
   }
 
