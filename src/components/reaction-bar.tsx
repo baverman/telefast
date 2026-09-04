@@ -43,6 +43,7 @@ export function ReactionContextMenu({
   threadId,
   x,
   y,
+  placement,
   onClose,
 }: {
   message: Message
@@ -50,6 +51,7 @@ export function ReactionContextMenu({
   threadId?: number
   x: number
   y: number
+  placement: 'above' | 'below'
   onClose: () => void
 }) {
   const react = useSendReaction(peerId, threadId)
@@ -75,8 +77,9 @@ export function ReactionContextMenu({
         }}
       />
       <div
-        class="fixed z-50 flex -translate-x-1/2 -translate-y-full gap-1 rounded-full border border-zinc-700 bg-zinc-900 px-1 py-1 shadow-2xl shadow-black/50"
+        class={`fixed z-50 flex -translate-x-1/2 gap-1 rounded-full border border-zinc-700 bg-zinc-900 px-1 py-1 shadow-2xl shadow-black/50 ${placement === 'above' ? '-translate-y-full' : ''}`}
         style={{ left: `${x}px`, top: `${y}px` }}
+        role="menu"
       >
         {QUICK_REACTIONS.map((emoji) => {
           const active = isActive(emoji)
@@ -85,6 +88,7 @@ export function ReactionContextMenu({
               key={emoji}
               type="button"
               class={`grid size-7 place-items-center rounded-full text-base transition ${active ? 'bg-sky-500/25' : 'hover:bg-zinc-800'}`}
+              role="menuitem"
               title={active ? `Remove ${emoji}` : `React with ${emoji}`}
               onClick={() => {
                 react.mutate({ messageId: message.id, emoji, remove: active })

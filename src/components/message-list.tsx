@@ -1,31 +1,50 @@
-import { useEffect, useRef } from 'preact/hooks'
+import { useEffect, useRef, useState } from 'preact/hooks'
 import { useLocation } from 'preact-iso'
 import type { Dialog, Message } from '@mtcute/web'
 import { useTelegram, isGroupPeer } from '../telegram/telegram-provider'
 import { useMessages } from '../telegram/queries'
 import { StickerView, timeLabel } from './media'
 import { MessageContent } from './message-content'
-import { ReactionBar } from './reaction-bar'
+import { ReactionBar, ReactionContextMenu } from './reaction-bar'
+import { MessageMetadata } from './message-metadata'
 
-export function MessageList({ peerId, dialog, threadId }: { peerId: string; dialog: Dialog; threadId?: number }) {
+export function MessageList({
+  peerId,
+  dialog,
+  threadId,
+  targetMessageId,
+}: {
+  peerId: string
+  dialog: Dialog
+  threadId?: number
+  targetMessageId?: number
+}) {
   const { client } = useTelegram()
   const location = useLocation()
   const history = useMessages(peerId, threadId)
   const containerRef = useRef<HTMLDivElement | null>(null)
   const previousCountRef = useRef(0)
+  const [reactionMenu, setReactionMenu] = useState<{
+    message: Message
+    x: number
+    y: number
+    placement: 'above' | 'below'
+  } | null>(null)
   const initialScrollRef = useRef({
     key: '',
     lastReadIngoing: 0,
     hasUnread: false,
+    targetMessageId: undefined as number | undefined,
     done: false,
   })
-  const chatKey = `${peerId}:${threadId ?? ''}`
+  const chatKey = `${peerId}:${threadId ?? ''}:${targetMessageId ?? ''}`
 
   if (initialScrollRef.current.key !== chatKey) {
     initialScrollRef.current = {
       key: chatKey,
       lastReadIngoing: dialog.lastReadIngoing,
       hasUnread: threadId == null && dialog.unreadCount > 0,
+      targetMessageId,
       done: false,
     }
     previousCountRef.current = 0
@@ -57,6 +76,22 @@ export function MessageList({ peerId, dialog, threadId }: { peerId: string; dial
 
     const initialScroll = initialScrollRef.current
     if (!initialScroll.done) {
+      if (initialScroll.targetMessageId != null) {
+        const targetMessage = history.messages.find((message) => message.id === initialScroll.targetMessageId)
+        const oldestMessage = history.messages[0]
+        if (!targetMessage && oldestMessage.id > initialScroll.targetMessageId && history.hasNextPage) {
+          if (!history.isFetchingNextPage) void history.fetchNextPage()
+          return
+        }
+
+        const target = targetMessage
+          ? container.querySelector<HTMLElement>(`[data-message-id="${targetMessage.id}"]`)
+          : null
+        if (target) target.scrollIntoView({ block: 'center' })
+        else container.scrollTop = container.scrollHeight
+        initialScroll.done = true
+        return
+      }
       if (initialScroll.hasUnread) {
         const oldestMessage = history.messages[0]
         if (oldestMessage.id > initialScroll.lastReadIngoing && history.hasNextPage) {
@@ -84,7 +119,7 @@ export function MessageList({ peerId, dialog, threadId }: { peerId: string; dial
 
   return (
     <div ref={containerRef} class="min-h-0 flex-1 overflow-y-auto px-4 py-6 md:px-8">
-      <div class="mx-auto flex min-h-full max-w-3xl flex-col justify-end gap-2">
+      <div class="mx-auto flex min-h-full max-w-3xl flex-col justify-end gap-4">
         {history.hasNextPage && (
           <button
             class="mx-auto mb-4 rounded-full border border-zinc-700 bg-zinc-900 px-4 py-2 text-xs text-zinc-300 hover:bg-zinc-800 disabled:opacity-50"
@@ -104,14 +139,43 @@ export function MessageList({ peerId, dialog, threadId }: { peerId: string; dial
             data-message-id={message.id}
             class={message.isService
               ? 'message-service'
-              : `group ${message.media?.type === 'sticker'
+              : `group relative ${message.media?.type === 'sticker'
                   ? `sticker-message ${message.isOutgoing ? 'sticker-out' : 'sticker-in'}`
                   : `message-bubble ${message.isOutgoing ? 'message-out' : 'message-in'}`}`
             }
           >
+            {!message.isService && (
+              <button
+                type="button"
+                class={`absolute right-1 top-1 z-10 grid size-6 place-items-center rounded-full border border-zinc-700 bg-zinc-900 text-zinc-400 shadow-md transition hover:bg-zinc-800 hover:text-zinc-100 focus:opacity-100 ${
+                  reactionMenu?.message.id === message.id
+                    ? 'opacity-100'
+                    : 'pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100'
+                }`}
+                aria-label="Choose a reaction"
+                aria-expanded={reactionMenu?.message.id === message.id}
+                onClick={(event) => {
+                  const rect = event.currentTarget.getBoundingClientRect()
+                  const placement = rect.top >= 48 ? 'above' : 'below'
+                  setReactionMenu({
+                    message,
+                    x: Math.min(Math.max(rect.left + rect.width / 2, 104), window.innerWidth - 104),
+                    y: placement === 'above' ? rect.top - 4 : rect.bottom + 4,
+                    placement,
+                  })
+                }}
+              >
+                <svg aria-hidden="true" viewBox="0 0 20 20" class="size-4" fill="currentColor">
+                  <circle cx="4" cy="10" r="1.5" />
+                  <circle cx="10" cy="10" r="1.5" />
+                  <circle cx="16" cy="10" r="1.5" />
+                </svg>
+              </button>
+            )}
             {isGroupPeer(dialog.peer) && !message.isOutgoing && (
               <p class="mb-1 text-xs font-medium text-sky-300">{message.sender.displayName}</p>
             )}
+            {!message.isService && <MessageMetadata message={message} telegram={client} />}
             {message.media?.type === 'sticker' ? (
               <StickerView sticker={message.media} telegram={client} />
             ) : (
@@ -132,6 +196,17 @@ export function MessageList({ peerId, dialog, threadId }: { peerId: string; dial
             </div>
           </article>
         ))}
+        {reactionMenu && (
+          <ReactionContextMenu
+            message={reactionMenu.message}
+            peerId={peerId}
+            threadId={threadId}
+            x={reactionMenu.x}
+            y={reactionMenu.y}
+            placement={reactionMenu.placement}
+            onClose={() => setReactionMenu(null)}
+          />
+        )}
       </div>
     </div>
   )

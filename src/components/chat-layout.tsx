@@ -13,6 +13,7 @@ export function ChatLayout({ peerId }: { peerId?: string }) {
   const dialogs = useDialogs()
   const selected = useDialog(peerId)
   const threadId = Number.isSafeInteger(Number(location.query.thread)) ? Number(location.query.thread) : undefined
+  const targetMessageId = Number.isSafeInteger(Number(location.query.message)) ? Number(location.query.message) : undefined
   const hasUnread = (dialogs.data?.find((item) => dialogId(item) === peerId)?.unreadCount ?? 0) > 0
 
   useEffect(() => {
@@ -31,7 +32,7 @@ export function ChatLayout({ peerId }: { peerId?: string }) {
       <main class="flex h-screen overflow-hidden bg-zinc-950 text-zinc-100">
         <ChatSidebar selectedPeerId={selected.data ? peerId : undefined} />
         {selected.data && peerId ? (
-          <Conversation peerId={peerId} dialog={selected.data} threadId={threadId} />
+          <Conversation peerId={peerId} dialog={selected.data} threadId={threadId} targetMessageId={targetMessageId} />
         ) : (
           <EmptyConversation message={selected.isError ? 'Chat not found' : undefined} />
         )}

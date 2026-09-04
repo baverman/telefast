@@ -5,7 +5,17 @@ import { Avatar } from './media'
 import { MessageList } from './message-list'
 import { MessageComposer } from './message-composer'
 
-export function Conversation({ peerId, dialog, threadId }: { peerId: string; dialog: Dialog; threadId?: number }) {
+export function Conversation({
+  peerId,
+  dialog,
+  threadId,
+  targetMessageId,
+}: {
+  peerId: string
+  dialog: Dialog
+  threadId?: number
+  targetMessageId?: number
+}) {
   const { client } = useTelegram()
   return (
     <section class="flex min-w-0 flex-1 flex-col bg-chat">
@@ -18,7 +28,7 @@ export function Conversation({ peerId, dialog, threadId }: { peerId: string; dia
         />
         <strong class="truncate text-sm font-medium">{dialog.peer.displayName}</strong>
       </header>
-      <MessageList peerId={peerId} dialog={dialog} threadId={threadId} />
+      <MessageList peerId={peerId} dialog={dialog} threadId={threadId} targetMessageId={targetMessageId} />
       {canSendMessages(dialog.peer)
         ? <MessageComposer peerId={peerId} threadId={threadId} />
         : (
