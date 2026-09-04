@@ -1,4 +1,4 @@
-import { useRef } from 'preact/hooks'
+import { useEffect, useRef, useState } from 'preact/hooks'
 import { useQuery } from '@tanstack/preact-query'
 import type { FileLocation, Message, MessageAction } from '@mtcute/web'
 import type { TelefastClient } from '../telegram'
@@ -100,6 +100,8 @@ function PhotoView({ message, telegram }: { message: Message; telegram: Telefast
 function VideoView({ message, telegram }: { message: Message; telegram: TelefastClient | null }) {
   const video = message.media as Extract<NonNullable<Message['media']>, { type: 'video' }>
   const hostRef = useRef<HTMLDivElement | null>(null)
+  const videoRef = useRef<HTMLVideoElement | null>(null)
+  const [hovered, setHovered] = useState(false)
   const visible = useVisible(hostRef, '240px')
   const posterThumb = video.getThumbnail('m') ?? video.getThumbnail('s')
   const poster = useMediaUrl(
@@ -116,24 +118,41 @@ function VideoView({ message, telegram }: { message: Message; telegram: Telefast
   )
   const fileName = video.fileName || (video.isAnimation ? 'animation.mp4' : 'video.mp4')
 
+  useEffect(() => {
+    if (!video.isAnimation || !videoRef.current) return
+    if (hovered) void videoRef.current.play().catch(() => {})
+    else videoRef.current.pause()
+  }, [hovered, url, video.isAnimation])
+
   return (
     <div
       ref={hostRef}
       class="max-w-full"
       style={{ width: `min(${video.width}px, 20rem)` }}
     >
-      <video
-        class="block w-full rounded-lg bg-zinc-900 object-contain"
-        style={{ aspectRatio: `${video.width} / ${video.height}` }}
-        src={url}
-        poster={poster.data}
-        controls={!video.isAnimation}
-        autoPlay={video.isAnimation}
-        loop={video.isAnimation}
-        muted={video.isAnimation}
-        playsInline
-        preload={video.isAnimation ? 'auto' : 'metadata'}
-      />
+      <div
+        class="relative"
+        onMouseEnter={() => { if (video.isAnimation) setHovered(true) }}
+        onMouseLeave={() => { if (video.isAnimation) setHovered(false) }}
+      >
+        <video
+          ref={videoRef}
+          class="block w-full rounded-lg bg-zinc-900 object-contain"
+          style={{ aspectRatio: `${video.width} / ${video.height}` }}
+          src={url}
+          poster={poster.data}
+          controls={!video.isAnimation}
+          loop={video.isAnimation}
+          muted={video.isAnimation}
+          playsInline
+          preload="metadata"
+        />
+        {video.isAnimation && !hovered && (
+          <span class="pointer-events-none absolute inset-0 grid place-items-center" aria-hidden="true">
+            <span class="grid size-10 place-items-center rounded-full bg-black/55 pl-0.5 text-sm text-white shadow-lg">▶</span>
+          </span>
+        )}
+      </div>
       <div class="mt-2"><MediaDownloadLink url={url} fileName={fileName} /></div>
     </div>
   )
