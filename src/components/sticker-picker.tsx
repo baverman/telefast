@@ -14,6 +14,7 @@ export function StickerPicker({ peerId, onSent }: { peerId: string; onSent: () =
   const [tab, setTab] = useState('recent')
   const [search, setSearch] = useState('')
   const [large, setLarge] = useState(false)
+  const [animatedStickerId, setAnimatedStickerId] = useState<string | null>(null)
 
   const stickers = useMemo(() => {
     const query = search.trim().toLowerCase()
@@ -82,29 +83,23 @@ export function StickerPicker({ peerId, onSent }: { peerId: string; onSent: () =
             class="grid items-center justify-center gap-2"
             style={{ gridTemplateColumns: `repeat(auto-fill, ${large ? '8rem' : '4rem'})` }}
           >
-            {stickers.map((sticker) => {
-              const disabled = sticker.sourceType !== 'static'
-              return (
-                <button
-                  key={sticker.uniqueFileId}
-                  class="relative grid w-full place-items-center overflow-hidden rounded-xl hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-40"
-                  style={{ aspectRatio: `${sticker.width} / ${sticker.height}` }}
-                  type="button"
-                  disabled={disabled || sendSticker.isPending}
-                  title={disabled ? `${sticker.sourceType} stickers are not supported for sending yet` : `Send ${sticker.emoji || 'sticker'}`}
-                  onClick={() => sendSticker.mutate(sticker, { onSuccess: onSent })}
-                >
-                  {disabled ? (
-                    <>
-                      <span class={large ? 'text-4xl' : 'text-2xl'}>{sticker.emoji || '◌'}</span>
-                      <span class="absolute bottom-1 rounded bg-zinc-950/80 px-1 text-[9px] uppercase text-zinc-400">{sticker.sourceType}</span>
-                    </>
-                  ) : (
-                    <StickerView sticker={sticker} telegram={client} compact />
-                  )}
-                </button>
-              )
-            })}
+            {stickers.map((sticker) => (
+              <button
+                key={sticker.uniqueFileId}
+                class="relative grid w-full place-items-center overflow-hidden rounded-xl hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-40"
+                style={{ aspectRatio: `${sticker.width} / ${sticker.height}` }}
+                type="button"
+                disabled={sendSticker.isPending}
+                title={`Send ${sticker.emoji || 'sticker'}`}
+                onMouseEnter={() => setAnimatedStickerId(sticker.uniqueFileId)}
+                onMouseLeave={() => setAnimatedStickerId(null)}
+                onFocus={() => setAnimatedStickerId(sticker.uniqueFileId)}
+                onBlur={() => setAnimatedStickerId(null)}
+                onClick={() => sendSticker.mutate(sticker, { onSuccess: onSent })}
+              >
+                <StickerView sticker={sticker} telegram={client} compact animate={animatedStickerId === sticker.uniqueFileId} />
+              </button>
+            ))}
           </div>
         ) : (
           <p class="grid min-h-40 place-items-center text-sm text-zinc-500">No stickers found.</p>

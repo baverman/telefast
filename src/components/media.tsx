@@ -164,71 +164,109 @@ export function Avatar({
 type StickerMedia = Extract<NonNullable<Message['media']>, { type: 'sticker' }>
 
 export function StickerView({
-  sticker,
-  telegram,
-  compact = false,
-}: {
-  sticker: StickerMedia
-  telegram: TelefastClient | null
-  compact?: boolean
-}) {
-  const hostRef = useRef<HTMLDivElement | null>(null)
-  const visible = useVisible(hostRef, '240px')
-  const animated = sticker.sourceType === 'animated'
-  const mimeType = sticker.sourceType === 'video' ? 'video/webm' : 'image/webp'
-  const stickerQuery = useQuery({
-    queryKey: ['telegram', 'sticker-file', sticker.uniqueFileId],
-    queryFn: async (): Promise<string | Uint8Array | null> => {
-      if (!telegram) return null
-      if (animated) return telegram.downloadAsBuffer(sticker)
-      return cachedMediaUrl(telegram, sticker.uniqueFileId, sticker, mimeType)
-    },
-    enabled: Boolean(telegram && visible),
-    staleTime: Infinity,
-  })
-  const source = typeof stickerQuery.data === 'string' ? stickerQuery.data : ''
-  const bytes = stickerQuery.data instanceof Uint8Array ? stickerQuery.data : undefined
+         sticker,
+         telegram,
+         compact = false,
+         animate = true,
+       }: {
+         sticker: StickerMedia
+         telegram: TelefastClient | null
+         compact?: boolean
+         animate?: boolean
+       }) {
+         const hostRef = useRef<HTMLDivElement | null>(null)
+         const animationHostRef = useRef<HTMLDivElement | null>(null)
+         const videoRef = useRef<HTMLVideoElement | null>(null)
+         const lottieRef = useRef<{ play: () => void; pause: () => void; destroy: () => void } | null>(null)
+         const shouldPlayRef = useRef(false)
+         const [hovered, setHovered] = useState(false)
+         const visible = useVisible(hostRef, '240px')
+         const animated = sticker.sourceType === 'animated'
+         const playable = animated || sticker.sourceType === 'video'
+         const shouldPlay = compact ? animate : hovered
+         shouldPlayRef.current = shouldPlay
+         const previewing = compact && !animate && playable
+         const thumbnail = sticker.thumbnails[sticker.thumbnails.length - 1]
+         const mimeType = sticker.sourceType === 'video' ? 'video/webm' : 'image/webp'
+         const stickerQuery = useQuery({
+           queryKey: ['telegram', 'sticker-file', sticker.uniqueFileId, previewing ? 'preview' : 'full'],
+           queryFn: async (): Promise<string | Uint8Array | null> => {
+             if (!telegram) return null
+             if (previewing) {
+               if (!thumbnail) return null
+               return cachedMediaUrl(telegram, `${sticker.uniqueFileId}:preview`, thumbnail, 'image/jpeg')
+             }
+             if (animated) return telegram.downloadAsBuffer(sticker)
+             return cachedMediaUrl(telegram, sticker.uniqueFileId, sticker, mimeType)
+           },
+           enabled: Boolean(telegram && visible),
+           staleTime: Infinity,
+         })
+         const source = typeof stickerQuery.data === 'string' ? stickerQuery.data : ''
+         const bytes = stickerQuery.data instanceof Uint8Array ? stickerQuery.data : undefined
 
-  useEffect(() => {
-    if (!bytes || !animated || !hostRef.current) return
-    let active = true
-    let destroy = () => {}
-    void (async () => {
-      const animationData = await new Response(
-        new Blob([Uint8Array.from(bytes)]).stream().pipeThrough(new DecompressionStream('gzip')),
-      ).json()
-      const { default: lottie } = await import('lottie-web/build/player/lottie_light')
-      if (!active || !hostRef.current) return
-      const animation = lottie.loadAnimation({
-        container: hostRef.current,
-        renderer: 'svg',
-        loop: true,
-        autoplay: true,
-        animationData,
-      })
-      destroy = () => animation.destroy()
-    })().catch((error) => console.warn('[Telefast] Failed to render sticker', error))
-    return () => {
-      active = false
-      destroy()
-    }
-  }, [animated, bytes])
+         useEffect(() => {
+           const animationHost = animationHostRef.current
+           if (!bytes || !animated || !animationHost) return
+           let active = true
+           void (async () => {
+             const animationData = await new Response(
+               new Blob([Uint8Array.from(bytes)]).stream().pipeThrough(new DecompressionStream('gzip')),
+             ).json()
+             const { default: lottie } = await import('lottie-web/build/player/lottie_light')
+             if (!active) return
+             const animation = lottie.loadAnimation({
+               container: animationHost,
+               renderer: 'svg',
+               loop: true,
+               autoplay: false,
+               animationData,
+             })
+             lottieRef.current = animation
+             if (shouldPlayRef.current) animation.play()
+           })().catch((error) => console.warn('[Telefast] Failed to render sticker', error))
+           return () => {
+             active = false
+             lottieRef.current?.destroy()
+             lottieRef.current = null
+           }
+         }, [animated, bytes])
 
-  const label = `${sticker.emoji ? `${sticker.emoji} ` : ''}Sticker`
-  return (
-    <div
-      ref={hostRef}
-      class={compact
-        ? 'grid w-full place-items-center overflow-hidden'
-        : 'grid place-items-center'
-      }
-      style={compact ? { aspectRatio: `${sticker.width} / ${sticker.height}` } : undefined}
-      role="img"
-      aria-label={label}
-    >
-      {sticker.sourceType === 'static' && source && <img class={compact ? 'size-full object-contain' : 'h-auto max-h-60 w-auto max-w-48 md:max-w-60 object-contain'} src={source} alt={label} decoding="async" />}
-      {sticker.sourceType === 'video' && source && <video class={compact ? 'size-full object-contain' : 'h-auto max-h-60 w-auto max-w-48 md:max-w-60 object-contain'} src={source} autoPlay loop muted playsInline aria-label={label} />}
-      {stickerQuery.isError && <span class="text-sm text-zinc-400">{label}</span>}
-    </div>
-  )
-}
+         useEffect(() => {
+           if (shouldPlay) lottieRef.current?.play()
+           else lottieRef.current?.pause()
+
+           const video = videoRef.current
+           if (!video) return
+           if (shouldPlay) void video.play().catch(() => {})
+           else video.pause()
+         }, [shouldPlay, source])
+
+         const label = `${sticker.emoji ? `${sticker.emoji} ` : ''}Sticker`
+         return (
+           <div
+             ref={hostRef}
+             class={compact
+               ? 'relative grid w-full place-items-center overflow-hidden'
+               : 'relative grid place-items-center'
+             }
+             style={compact ? { aspectRatio: `${sticker.width} / ${sticker.height}` } : undefined}
+             role="img"
+             aria-label={label}
+             onMouseEnter={() => { if (!compact) setHovered(true) }}
+             onMouseLeave={() => { if (!compact) setHovered(false) }}
+           >
+             {previewing && source && <img class="size-full object-contain" src={source} alt={label} decoding="async" />}
+             {previewing && !source && <span class="text-2xl">{sticker.emoji || '◌'}</span>}
+             {!previewing && animated && <div ref={animationHostRef} class={compact ? 'size-full' : 'w-48 md:w-60'} style={{ aspectRatio: `${sticker.width} / ${sticker.height}` }} />}
+             {!previewing && sticker.sourceType === 'static' && source && <img class={compact ? 'size-full object-contain' : 'h-auto max-h-60 w-auto max-w-48 md:max-w-60 object-contain'} src={source} alt={label} decoding="async" />}
+             {!previewing && sticker.sourceType === 'video' && source && <video ref={videoRef} class={compact ? 'size-full object-contain' : 'h-auto max-h-60 w-auto max-w-48 md:max-w-60 object-contain'} src={source} loop muted playsInline aria-label={label} />}
+             {!compact && playable && !hovered && (
+               <span class="pointer-events-none absolute inset-0 grid place-items-center" aria-hidden="true">
+                 <span class="grid size-10 place-items-center rounded-full bg-black/55 pl-0.5 text-sm text-white shadow-lg">▶</span>
+               </span>
+             )}
+             {stickerQuery.isError && <span class="text-sm text-zinc-400">{label}</span>}
+           </div>
+         )
+       }

@@ -189,7 +189,6 @@ export function useSendSticker(peerId: string) {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: async (sticker: Sticker) => {
-      if (sticker.sourceType !== 'static') throw new Error('Only static stickers can be sent')
       const dialog = await resolveDialog(client!, queryClient, peerId)
       const sent = await client!.sendMedia(dialog.peer, sticker.inputMedia)
       return { sent, sticker }
