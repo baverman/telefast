@@ -7,5 +7,3 @@
 * Bot command could lead to previous message refresh. Now messages aren't updated.
 * Edit doesn't update message.
 * switch doesn't invalidate cache
-* stickers scroll jump
-* square stickers in picker

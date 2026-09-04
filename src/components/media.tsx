@@ -183,6 +183,7 @@ export function StickerView({
          const visible = useVisible(hostRef, '240px')
          const animated = sticker.sourceType === 'animated'
          const playable = animated || sticker.sourceType === 'video'
+         const aspectRatio = sticker.width > 0 && sticker.height > 0 ? sticker.width / sticker.height : 1
          const shouldPlay = compact ? animate : hovered
          shouldPlayRef.current = shouldPlay
          const previewing = compact && !animate && playable
@@ -250,7 +251,10 @@ export function StickerView({
                ? 'relative grid w-full place-items-center overflow-hidden'
                : 'relative grid place-items-center'
              }
-             style={compact ? { aspectRatio: `${sticker.width} / ${sticker.height}` } : undefined}
+             style={compact
+               ? { aspectRatio: String(aspectRatio) }
+               : { aspectRatio: String(aspectRatio), width: `${Math.min(1, aspectRatio) * 15}rem` }
+             }
              role="img"
              aria-label={label}
              onMouseEnter={() => { if (!compact) setHovered(true) }}
@@ -258,9 +262,9 @@ export function StickerView({
            >
              {previewing && source && <img class="size-full object-contain" src={source} alt={label} decoding="async" />}
              {previewing && !source && <span class="text-2xl">{sticker.emoji || '◌'}</span>}
-             {!previewing && animated && <div ref={animationHostRef} class={compact ? 'size-full' : 'w-48 md:w-60'} style={{ aspectRatio: `${sticker.width} / ${sticker.height}` }} />}
-             {!previewing && sticker.sourceType === 'static' && source && <img class={compact ? 'size-full object-contain' : 'h-auto max-h-60 w-auto max-w-48 md:max-w-60 object-contain'} src={source} alt={label} decoding="async" />}
-             {!previewing && sticker.sourceType === 'video' && source && <video ref={videoRef} class={compact ? 'size-full object-contain' : 'h-auto max-h-60 w-auto max-w-48 md:max-w-60 object-contain'} src={source} loop muted playsInline aria-label={label} />}
+             {!previewing && animated && <div ref={animationHostRef} class="size-full" />}
+             {!previewing && sticker.sourceType === 'static' && source && <img class="size-full object-contain" src={source} alt={label} decoding="async" />}
+             {!previewing && sticker.sourceType === 'video' && source && <video ref={videoRef} class="size-full object-contain" src={source} loop muted playsInline aria-label={label} />}
              {!compact && playable && !hovered && (
                <span class="pointer-events-none absolute inset-0 grid place-items-center" aria-hidden="true">
                  <span class="grid size-10 place-items-center rounded-full bg-black/55 pl-0.5 text-sm text-white shadow-lg">▶</span>
