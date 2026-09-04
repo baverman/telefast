@@ -2,6 +2,7 @@ import { useEffect, useState } from 'preact/hooks'
 import type { Message } from '@mtcute/web'
 import { useDeleteMessage, useDialogs, useForwardMessage, useSendReaction, type MessageReplyTarget } from '../telegram/queries'
 import { canSendMessages } from '../telegram/model'
+import { MessageStickerPackViewer } from './sticker-picker'
 
 const QUICK_REACTIONS = ['👍', '❤️', '😂', '🔥', '🎉', '😢']
 
@@ -61,12 +62,13 @@ export function MessageContextMenu({
          onEdit: (message: Message) => void
          onClose: () => void
        }) {
-         const [view, setView] = useState<'menu' | 'forward' | 'delete'>('menu')
+         const [view, setView] = useState<'menu' | 'sticker-pack' | 'forward' | 'delete'>('menu')
          const react = useSendReaction(peerId, threadId)
          const remove = useDeleteMessage(peerId, threadId)
          const forward = useForwardMessage()
          const dialogs = useDialogs()
          const reactions = message.reactions?.reactions ?? []
+         const sticker = message.media?.type === 'sticker' ? message.media : null
          const isActive = (emoji: string) => reactions.some((reaction) => reaction.emoji === emoji && reaction.order !== null)
          const error = remove.error ?? forward.error
 
@@ -120,10 +122,18 @@ export function MessageContextMenu({
                    })}
                  </div>
                  {action('Reply', () => { onReply({ message, quote }); onClose() })}
-                 {action('Edit', () => { onEdit(message); onClose() }, !message.isOutgoing || !message.text)}
+                 {message.isOutgoing && message.text && action('Edit', () => { onEdit(message); onClose() })}
+                 {sticker?.hasStickerSet && action('View sticker pack', () => setView('sticker-pack'))}
                  {action('Forward…', () => setView('forward'), !message.canBeForwarded)}
                  {action('Delete…', () => setView('delete'), false, true)}
                </div>
+             ) : view === 'sticker-pack' && sticker ? (
+               <MessageStickerPackViewer
+                 sticker={sticker}
+                 peerId={peerId}
+                 onSent={onClose}
+                 onClose={onClose}
+               />
              ) : (
                <div class="fixed left-1/2 top-1/2 z-50 w-[min(26rem,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-zinc-700 bg-zinc-900 p-4 shadow-2xl shadow-black/60">
                  {view === 'forward' ? (

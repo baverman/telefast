@@ -140,6 +140,35 @@ export function useStickers() {
   })
 }
 
+
+export function useStickerSet(sticker?: Sticker | null) {
+  const { client, status } = useTelegram()
+  return useQuery({
+    queryKey: ['telegram', 'sticker-set', sticker?.uniqueFileId ?? ''],
+    queryFn: () => client!.getStickerSet(sticker!.inputStickerSet!),
+    enabled: status === 'authenticated' && Boolean(client && sticker?.hasStickerSet && sticker.inputStickerSet),
+    staleTime: 5 * 60_000,
+    retry: false,
+  })
+}
+
+export function useSetStickerPackInstalled() {
+  const { client } = useTelegram()
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ pack, installed }: { pack: StickerSet; installed: boolean }) => {
+      if (installed) {
+        await client!.call({ _: 'messages.installStickerSet', stickerset: pack.inputStickerSet, archived: false })
+      } else {
+        await client!.call({ _: 'messages.uninstallStickerSet', stickerset: pack.inputStickerSet })
+      }
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: telegramKeys.stickers() })
+    },
+  })
+}
+
 function commandEntity(text: string) {
   const match = text.match(/^\/([a-zA-Z0-9_]+)(?:@[a-zA-Z0-9_]+)?/)
   if (!match) return null
