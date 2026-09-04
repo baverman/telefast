@@ -167,12 +167,10 @@ export function StickerView({
   sticker,
   telegram,
   compact = false,
-  largePreview = false,
 }: {
   sticker: StickerMedia
   telegram: TelefastClient | null
   compact?: boolean
-  largePreview?: boolean
 }) {
   const hostRef = useRef<HTMLDivElement | null>(null)
   const visible = useVisible(hostRef, '240px')
@@ -221,9 +219,10 @@ export function StickerView({
     <div
       ref={hostRef}
       class={compact
-        ? `grid aspect-square place-items-center overflow-hidden ${largePreview ? 'size-32' : 'size-16'}`
+        ? 'grid w-full place-items-center overflow-hidden'
         : 'grid place-items-center'
       }
+      style={compact ? { aspectRatio: `${sticker.width} / ${sticker.height}` } : undefined}
       role="img"
       aria-label={label}
     >

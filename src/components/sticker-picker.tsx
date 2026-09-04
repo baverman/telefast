@@ -56,37 +56,39 @@ export function StickerPicker({ peerId, onSent }: { peerId: string; onSent: () =
           2×
         </button>
       </div>
-      <nav class="flex shrink-0 gap-1 overflow-x-auto border-b border-zinc-800 p-2" aria-label="Sticker packs">
-        {[
-          { id: 'recent', label: 'Recent' },
-          { id: 'favorites', label: 'Favorites' },
-          ...stickerPacks.map((pack) => ({ id: pack.shortName, label: pack.title })),
-        ].map((item) => (
-          <button
-            key={item.id}
-            class={`shrink-0 rounded-lg px-3 py-1.5 text-xs ${tab === item.id && !search ? 'bg-sky-500/20 text-sky-200' : 'text-zinc-400 hover:bg-zinc-800'}`}
-            type="button"
-            title={item.label}
-            onClick={() => { setSearch(''); setTab(item.id) }}
-          >
-            {item.label}
-          </button>
-        ))}
-      </nav>
-      <div class="min-h-48 flex-1 overflow-y-auto p-3">
+      <div class="flex min-h-0 flex-1">
+        <nav class="flex w-44 shrink-0 flex-col gap-1 overflow-y-auto border-r border-zinc-800 p-2" aria-label="Sticker packs">
+          {[
+            { id: 'recent', label: 'Recent' },
+            { id: 'favorites', label: 'Favorites' },
+            ...stickerPacks.map((pack) => ({ id: pack.shortName, label: pack.title })),
+          ].map((item) => (
+            <button
+              key={item.id}
+              class={`w-full shrink-0 truncate rounded-lg px-3 py-2 text-left text-xs transition ${tab === item.id && !search ? 'bg-sky-500/20 text-sky-200' : 'text-zinc-400 hover:bg-zinc-800'}`}
+              type="button"
+              title={item.label}
+              onClick={() => { setSearch(''); setTab(item.id) }}
+            >
+              {item.label}
+            </button>
+          ))}
+        </nav>
+        <div class="min-h-48 min-w-0 flex-1 overflow-y-auto p-3">
         {stickersQuery.isPending ? (
           <p class="grid min-h-40 place-items-center text-sm text-zinc-500">Loading stickers…</p>
         ) : stickers.length ? (
           <div
-            class="grid gap-2"
-            style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${large ? '8rem' : '4rem'}, 1fr))` }}
+            class="grid items-center justify-center gap-2"
+            style={{ gridTemplateColumns: `repeat(auto-fill, ${large ? '8rem' : '4rem'})` }}
           >
             {stickers.map((sticker) => {
               const disabled = sticker.sourceType !== 'static'
               return (
                 <button
                   key={sticker.uniqueFileId}
-                  class="relative grid aspect-square place-items-center rounded-xl hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-40"
+                  class="relative grid w-full place-items-center overflow-hidden rounded-xl hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-40"
+                  style={{ aspectRatio: `${sticker.width} / ${sticker.height}` }}
                   type="button"
                   disabled={disabled || sendSticker.isPending}
                   title={disabled ? `${sticker.sourceType} stickers are not supported for sending yet` : `Send ${sticker.emoji || 'sticker'}`}
@@ -98,7 +100,7 @@ export function StickerPicker({ peerId, onSent }: { peerId: string; onSent: () =
                       <span class="absolute bottom-1 rounded bg-zinc-950/80 px-1 text-[9px] uppercase text-zinc-400">{sticker.sourceType}</span>
                     </>
                   ) : (
-                    <StickerView sticker={sticker} telegram={client} compact largePreview={large} />
+                    <StickerView sticker={sticker} telegram={client} compact />
                   )}
                 </button>
               )
@@ -107,6 +109,7 @@ export function StickerPicker({ peerId, onSent }: { peerId: string; onSent: () =
         ) : (
           <p class="grid min-h-40 place-items-center text-sm text-zinc-500">No stickers found.</p>
         )}
+      </div>
       </div>
     </section>
   )
