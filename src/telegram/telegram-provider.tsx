@@ -21,6 +21,23 @@ export type SessionStatus = 'loading' | 'unauthenticated' | 'authenticated' | 'd
 type Resolver = (value: string) => void
 type Connection = ReturnType<typeof createTelegramConnection>
 
+const CONNECTION_TIMEOUT_MS = 30_000
+const RETRY_DELAY_MS = 5_000
+
+async function withConnectionTimeout<T>(operation: Promise<T>) {
+  let timeout: ReturnType<typeof setTimeout> | undefined
+  try {
+    return await Promise.race([
+      operation,
+      new Promise<never>((_, reject) => {
+        timeout = setTimeout(() => reject(new Error('Telegram connection timed out after 30 seconds')), CONNECTION_TIMEOUT_MS)
+      }),
+    ])
+  } finally {
+    if (timeout) clearTimeout(timeout)
+  }
+}
+
 interface BeginLoginInput {
   apiId: number
   apiHash: string
@@ -108,6 +125,7 @@ export function TelegramProvider({ children }: { children: ComponentChildren }) 
   )
   const connectionRef = useRef<Connection | null>(null)
   const recoveringConnectionRef = useRef(false)
+  const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const codeResolver = useRef<Resolver | null>(null)
   const passwordResolver = useRef<Resolver | null>(null)
   const client = connectionRef.current?.client ?? null
@@ -186,7 +204,7 @@ export function TelegramProvider({ children }: { children: ComponentChildren }) 
 
       replacement = createTelegramConnection(Number(storedApiId), storedApiHash)
       connectionRef.current = replacement
-      await replacement.client.start({})
+      await withConnectionTimeout(replacement.client.start({}))
       if (connectionRef.current !== replacement) {
         await replacement.destroy()
         return
@@ -200,14 +218,27 @@ export function TelegramProvider({ children }: { children: ComponentChildren }) 
       if (connectionRef.current === current || connectionRef.current === replacement) {
         connectionRef.current = null
       }
+      const invalidSession = isInvalidSessionError(recoveryError)
       setError(reportError('Failed to restore Telegram connection', recoveryError))
-      setStatus(isInvalidSessionError(recoveryError) ? 'unauthenticated' : 'disconnected')
+      setStatus(invalidSession ? 'unauthenticated' : 'disconnected')
+      if (!invalidSession) scheduleReconnect()
     } finally {
       recoveringConnectionRef.current = false
     }
   }
 
+  function scheduleReconnect() {
+    if (retryTimerRef.current) clearTimeout(retryTimerRef.current)
+    retryTimerRef.current = setTimeout(() => {
+      retryTimerRef.current = null
+      void reconnect()
+    }, RETRY_DELAY_MS)
+  }
   function enterChats(connection: Connection) {
+    if (retryTimerRef.current) {
+      clearTimeout(retryTimerRef.current)
+      retryTimerRef.current = null
+    }
     connectionRef.current = connection
     setMediaStreamClient(connection.client)
     attachUpdates(connection.client)
@@ -228,7 +259,7 @@ export function TelegramProvider({ children }: { children: ComponentChildren }) 
       const connection = createTelegramConnection(Number(storedApiId), storedApiHash)
       connectionRef.current = connection
       try {
-        await connection.client.start({})
+        await withConnectionTimeout(connection.client.start({}))
         if (cancelled) {
           await connection.destroy()
           return
@@ -243,7 +274,10 @@ export function TelegramProvider({ children }: { children: ComponentChildren }) 
         }
       }
     })()
-    return () => { cancelled = true }
+    return () => {
+      cancelled = true
+      if (retryTimerRef.current) clearTimeout(retryTimerRef.current)
+    }
   }, [])
 
   async function reconnect() {
@@ -262,7 +296,7 @@ export function TelegramProvider({ children }: { children: ComponentChildren }) 
     const connection = createTelegramConnection(Number(storedApiId), storedApiHash)
     connectionRef.current = connection
     try {
-      await connection.client.start({})
+      await withConnectionTimeout(connection.client.start({}))
       if (connectionRef.current !== connection) {
         await connection.destroy()
         return
@@ -272,8 +306,10 @@ export function TelegramProvider({ children }: { children: ComponentChildren }) 
     } catch (connectionError) {
       await connection.destroy().catch(() => undefined)
       if (connectionRef.current === connection) connectionRef.current = null
+      const invalidSession = isInvalidSessionError(connectionError)
       setError(reportError('Failed to connect to Telegram', connectionError))
-      setStatus(isInvalidSessionError(connectionError) ? 'unauthenticated' : 'disconnected')
+      setStatus(invalidSession ? 'unauthenticated' : 'disconnected')
+      if (!invalidSession) scheduleReconnect()
     } finally {
       recoveringConnectionRef.current = false
     }
