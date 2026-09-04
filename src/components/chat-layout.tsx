@@ -1,5 +1,8 @@
+import { useEffect } from 'preact/hooks'
 import { Route, Router, useLocation } from 'preact-iso'
-import { useTelegram } from '../telegram/telegram-provider'
+import { dialogId, useTelegram } from '../telegram/telegram-provider'
+import { useDialogs } from '../telegram/queries'
+import { setActiveChatPeerId } from '../telegram/active-chat'
 import { RequireAuth } from '../routing/require-auth'
 import { ChatSidebar } from './chat-sidebar'
 import { Conversation, EmptyConversation } from './conversation'
@@ -7,13 +10,27 @@ import { PeerInfo } from './peer-info'
 
 export function ChatLayout() {
   const location = useLocation()
-  const { error, clearError } = useTelegram()
-  const selectedPeerId = location.path.match(/^\/chat\/([^/]+)/)?.[1]
+  const { error, clearError, markRead } = useTelegram()
+  const dialogs = useDialogs()
+  const encodedPeerId = location.path.match(/^\/chat\/([^/]+)/)?.[1]
+  const selectedPeerId = encodedPeerId ? decodeURIComponent(encodedPeerId) : undefined
+  const hasUnread = (dialogs.data?.find((dialog) => dialogId(dialog) === selectedPeerId)?.unreadCount ?? 0) > 0
+
+  useEffect(() => {
+    setActiveChatPeerId(selectedPeerId ?? null)
+    return () => setActiveChatPeerId(null)
+  }, [selectedPeerId])
+
+  useEffect(() => {
+    if (!selectedPeerId || !hasUnread) return
+    if (document.visibilityState !== 'visible' || !document.hasFocus()) return
+    void markRead(selectedPeerId)
+  }, [selectedPeerId, hasUnread])
 
   return (
     <RequireAuth>
       <main class="flex h-screen overflow-hidden bg-zinc-950 text-zinc-100">
-        <ChatSidebar selectedPeerId={selectedPeerId ? decodeURIComponent(selectedPeerId) : undefined} />
+        <ChatSidebar selectedPeerId={selectedPeerId} />
         <div class="flex min-h-0 min-w-0 flex-1 overflow-hidden">
           <Router>
             <Route path="/" component={EmptyConversation} />

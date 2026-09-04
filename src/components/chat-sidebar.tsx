@@ -4,7 +4,7 @@ import { useDialogs } from '../telegram/queries'
 import { Avatar, messagePreview, timeLabel } from './media'
 
 export function ChatSidebar({ selectedPeerId }: { selectedPeerId?: string }) {
-  const { client, busy, logout, notificationPermission, enableNotifications } = useTelegram()
+  const { client, busy, logout, notificationPermission, enableNotifications, markRead } = useTelegram()
   const dialogsQuery = useDialogs()
   const dialogs = dialogsQuery.data ?? []
   const [search, setSearch] = useState('')
@@ -61,7 +61,15 @@ export function ChatSidebar({ selectedPeerId }: { selectedPeerId?: string }) {
                     {messagePreview(dialog.lastMessage, isGroupPeer(dialog.peer))}
                   </span>
                   {dialog.unreadCount > 0 && (
-                    <span class={`min-w-5 rounded-full px-1.5 py-0.5 text-center text-[10px] font-bold ${dialog.isMuted ? 'bg-zinc-800 text-zinc-400' : 'bg-sky-500 text-white'}`} title={dialog.isMuted ? 'Muted chat' : undefined}>
+                    <span
+                      class={`min-w-5 rounded-full px-1.5 py-0.5 text-center text-[10px] font-bold ${dialog.isMuted ? 'bg-zinc-800 text-zinc-400' : 'bg-sky-500 text-white'}`}
+                      title={dialog.isMuted ? 'Muted chat' : undefined}
+                      onClick={(event) => {
+                        event.preventDefault()
+                        event.stopPropagation()
+                        void markRead(id)
+                      }}
+                    >
                       {dialog.unreadCount}
                     </span>
                   )}

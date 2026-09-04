@@ -3,7 +3,6 @@ import { useLocation } from 'preact-iso'
 import type { Message } from '@mtcute/web'
 import { useTelegram } from '../telegram/telegram-provider'
 import { useDialog, type MessageReplyTarget } from '../telegram/queries'
-import { setActiveChatPeerId } from '../telegram/active-chat'
 import { canSendMessages } from '../telegram/model'
 import { Avatar } from './media'
 import { MessageList } from './message-list'
@@ -11,7 +10,7 @@ import { MessageComposer } from './message-composer'
 
 export function Conversation({ peerId }: { peerId: string }) {
   const location = useLocation()
-  const { client, markRead } = useTelegram()
+  const { client } = useTelegram()
   const selected = useDialog(peerId)
   const dialog = selected.data
   const [reply, setReply] = useState<MessageReplyTarget | null>(null)
@@ -22,19 +21,7 @@ export function Conversation({ peerId }: { peerId: string }) {
   if (threadId != null) infoQuery.set('thread', String(threadId))
   const infoHref = `/chat/${encodeURIComponent(peerId)}/info${infoQuery.size ? `?${infoQuery}` : ''}`
 
-  useEffect(() => {
-    setActiveChatPeerId(peerId)
-    return () => setActiveChatPeerId(null)
-  }, [peerId])
-
   useEffect(() => { setReply(null); setEdit(null) }, [peerId])
-
-  useEffect(() => {
-    if (!dialog?.unreadCount) return
-    if (document.visibilityState !== 'visible' || !document.hasFocus()) return
-    void markRead(peerId)
-  }, [peerId, dialog?.unreadCount])
-
   if (!dialog) return <EmptyConversation message={selected.isError ? 'Chat not found' : 'Loading chat…'} />
   return (
     <section class="flex min-w-0 flex-1 flex-col bg-chat">
