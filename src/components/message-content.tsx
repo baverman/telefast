@@ -295,7 +295,7 @@ export function MessageContent({ message, telegram }: { message: Message; telegr
     <div class="flex max-w-full flex-col gap-2">
       <MediaBlock message={message} telegram={telegram} />
       {message.text && (
-        <p class="whitespace-pre-wrap break-words text-[15px] leading-5">
+        <p data-message-text class="whitespace-pre-wrap break-words text-[15px] leading-5">
           <MessageText message={message} />
         </p>
       )}

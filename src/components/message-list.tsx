@@ -2,30 +2,50 @@ import { useEffect, useRef, useState } from 'preact/hooks'
 import { useLocation } from 'preact-iso'
 import type { Dialog, Message } from '@mtcute/web'
 import { useTelegram, isGroupPeer } from '../telegram/telegram-provider'
-import { useMessages } from '../telegram/queries'
+import { useMessages, type MessageReplyTarget } from '../telegram/queries'
 import { StickerView, timeLabel } from './media'
 import { MessageContent } from './message-content'
-import { ReactionBar, ReactionContextMenu } from './reaction-bar'
+import { ReactionBar, MessageContextMenu } from './reaction-bar'
 import { MessageMetadata } from './message-metadata'
+
+function selectedQuote(article: HTMLElement | null, message: Message): MessageReplyTarget['quote'] | undefined {
+  const selection = window.getSelection()
+  const range = selection?.rangeCount ? selection.getRangeAt(0) : null
+  const textRoot = article?.querySelector<HTMLElement>('[data-message-text]')
+  if (!selection || selection.isCollapsed || !range || !textRoot?.contains(range.commonAncestorContainer)) return undefined
+
+  const prefix = range.cloneRange()
+  prefix.selectNodeContents(textRoot)
+  prefix.setEnd(range.startContainer, range.startOffset)
+  const start = prefix.toString().length
+  const text = selection.toString()
+  const end = start + text.length
+  if (!text || start < 0 || end > message.text.length) return undefined
+  return { start, end, text }
+}
 
 export function MessageList({
   peerId,
   dialog,
   threadId,
   targetMessageId,
+  onReply,
 }: {
   peerId: string
   dialog: Dialog
   threadId?: number
   targetMessageId?: number
+  onReply: (reply: MessageReplyTarget) => void
 }) {
   const { client } = useTelegram()
   const location = useLocation()
   const history = useMessages(peerId, threadId)
   const containerRef = useRef<HTMLDivElement | null>(null)
   const previousCountRef = useRef(0)
+  const selectedQuoteRef = useRef<MessageReplyTarget['quote']>()
   const [reactionMenu, setReactionMenu] = useState<{
     message: Message
+    quote?: MessageReplyTarget['quote']
     x: number
     y: number
     placement: 'above' | 'below'
@@ -152,17 +172,22 @@ export function MessageList({
                     ? 'opacity-100'
                     : 'pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100'
                 }`}
-                aria-label="Choose a reaction"
+                aria-label="Message actions"
                 aria-expanded={reactionMenu?.message.id === message.id}
+                onMouseDown={(event) => {
+                  selectedQuoteRef.current = selectedQuote(event.currentTarget.closest('article'), message)
+                }}
                 onClick={(event) => {
                   const rect = event.currentTarget.getBoundingClientRect()
-                  const placement = rect.top >= 48 ? 'above' : 'below'
+                  const placement = rect.top >= 240 ? 'above' : 'below'
                   setReactionMenu({
                     message,
-                    x: Math.min(Math.max(rect.left + rect.width / 2, 104), window.innerWidth - 104),
+                    quote: selectedQuoteRef.current,
+                    x: Math.min(Math.max(rect.left + rect.width / 2, 124), window.innerWidth - 124),
                     y: placement === 'above' ? rect.top - 4 : rect.bottom + 4,
                     placement,
                   })
+                  selectedQuoteRef.current = undefined
                 }}
               >
                 <svg aria-hidden="true" viewBox="0 0 20 20" class="size-4" fill="currentColor">
@@ -203,13 +228,15 @@ export function MessageList({
           </article>
         ))}
         {reactionMenu && (
-          <ReactionContextMenu
+          <MessageContextMenu
             message={reactionMenu.message}
             peerId={peerId}
             threadId={threadId}
+            quote={reactionMenu.quote}
             x={reactionMenu.x}
             y={reactionMenu.y}
             placement={reactionMenu.placement}
+            onReply={onReply}
             onClose={() => setReactionMenu(null)}
           />
         )}

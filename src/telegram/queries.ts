@@ -3,7 +3,7 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tansta
 import { useMemo } from 'preact/hooks'
 import { useTelegram } from './telegram-provider'
 import { dialogId, isSupportedDialog } from './model'
-import { appendMessage, cachedDialog, telegramKeys, upsertMessage, type HistoryPage, type StickerData } from './query-data'
+import { appendMessage, cachedDialog, removeMessage, telegramKeys, upsertMessage, type HistoryPage, type StickerData } from './query-data'
 
 async function loadDialogs(client: NonNullable<ReturnType<typeof useTelegram>['client']>) {
   const dialogs: Dialog[] = []
@@ -145,15 +145,37 @@ function commandEntity(text: string) {
   if (!match) return null
   return { _: 'messageEntityBotCommand' as const, offset: 0, length: match[0].length }
 }
+
+export interface MessageReplyTarget {
+  message: import('@mtcute/web').Message
+  quote?: { start: number; end: number; text: string }
+}
+
+export interface SendTextInput {
+  text: string
+  reply?: MessageReplyTarget
+}
+
 export function useSendText(peerId: string, threadId?: number) {
   const { client } = useTelegram()
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: async (text: string) => {
+    mutationFn: async ({ text, reply }: SendTextInput) => {
       const dialog = await resolveDialog(client!, queryClient, peerId)
       const trimmed = text.trim()
       const entity = commandEntity(trimmed)
-      return client!.sendText(dialog.peer, entity ? { text: trimmed, entities: [entity] } : trimmed, threadId != null ? { threadId } : undefined)
+      const input = entity ? { text: trimmed, entities: [entity] } : trimmed
+      const options = threadId != null ? { threadId } : undefined
+      if (reply?.quote) {
+        return client!.quoteWithText(reply.message, {
+          text: input,
+          start: reply.quote.start,
+          end: reply.quote.end,
+          ...options,
+        })
+      }
+      if (reply) return client!.replyText(reply.message, input, options)
+      return client!.sendText(dialog.peer, input, options)
     },
     onSuccess: (message) => {
       appendMessage(queryClient, peerId, message, threadId)
@@ -197,6 +219,37 @@ export function useSendReaction(peerId: string, threadId?: number) {
     },
     onSuccess: (updated) => {
       if (updated) upsertMessage(queryClient, peerId, updated, threadId)
+    },
+  })
+}
+
+export function useDeleteMessage(peerId: string, threadId?: number) {
+  const { client } = useTelegram()
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ message, revoke }: { message: import('@mtcute/web').Message; revoke: boolean }) => {
+      await client!.deleteMessages([message], { revoke })
+      return message.id
+    },
+    onSuccess: (messageId) => {
+      removeMessage(queryClient, peerId, messageId, threadId)
+      void queryClient.invalidateQueries({ queryKey: telegramKeys.dialogs() })
+    },
+  })
+}
+
+export function useForwardMessage() {
+  const { client } = useTelegram()
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ message, toPeerId }: { message: import('@mtcute/web').Message; toPeerId: string }) => {
+      const target = await resolveDialog(client!, queryClient, toPeerId)
+      const forwarded = await client!.forwardMessages({ messages: [message], toChatId: target.peer })
+      return { forwarded, toPeerId }
+    },
+    onSuccess: ({ forwarded, toPeerId }) => {
+      forwarded.forEach((message) => appendMessage(queryClient, toPeerId, message))
+      void queryClient.invalidateQueries({ queryKey: telegramKeys.dialogs() })
     },
   })
 }

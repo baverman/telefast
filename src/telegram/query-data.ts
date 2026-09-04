@@ -51,6 +51,19 @@ export function upsertMessage(queryClient: QueryClient, peerId: string, message:
   )
 }
 
+export function removeMessage(queryClient: QueryClient, peerId: string, messageId: number, threadId?: number) {
+  queryClient.setQueryData<InfiniteData<HistoryPage, HistoryPage['next']>>(
+    telegramKeys.messages(peerId, threadId),
+    (current) => current ? {
+      ...current,
+      pages: current.pages.map((page) => ({
+        ...page,
+        messages: page.messages.filter((message) => message.id !== messageId),
+      })),
+    } : current,
+  )
+}
+
 export function cachedDialog(queryClient: QueryClient, peerId: string) {
   return queryClient.getQueryData<Dialog[]>(telegramKeys.dialogs())?.find((dialog) => String(dialog.peer.id) === peerId)
 }

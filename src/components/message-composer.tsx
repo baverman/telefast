@@ -1,8 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks'
-import { useBotCommands, useMessages, useSendText } from '../telegram/queries'
+import { useBotCommands, useMessages, useSendText, type MessageReplyTarget } from '../telegram/queries'
 import { StickerPicker } from './sticker-picker'
 
-export function MessageComposer({ peerId, threadId }: { peerId: string; threadId?: number }) {
+export function MessageComposer({
+  peerId,
+  threadId,
+  reply,
+  onCancelReply,
+}: {
+  peerId: string
+  threadId?: number
+  reply: MessageReplyTarget | null
+  onCancelReply: () => void
+}) {
   const sendText = useSendText(peerId, threadId)
   const commandsQuery = useBotCommands(peerId)
   const history = useMessages(peerId, threadId)
@@ -22,6 +32,10 @@ export function MessageComposer({ peerId, threadId }: { peerId: string; threadId
   useEffect(() => {
     inputRef.current?.focus()
   }, [peerId])
+
+  useEffect(() => {
+    if (reply) inputRef.current?.focus()
+  }, [reply])
   useEffect(() => {
     if (!pickerOpen) return
     const close = (event: KeyboardEvent) => {
@@ -68,7 +82,8 @@ export function MessageComposer({ peerId, threadId }: { peerId: string; threadId
     const text = draft.trim()
     setDraft('')
     try {
-      await sendText.mutateAsync(text)
+      await sendText.mutateAsync({ text, reply: reply ?? undefined })
+      onCancelReply()
     } catch {
       setDraft(text)
     }
@@ -77,6 +92,17 @@ export function MessageComposer({ peerId, threadId }: { peerId: string; threadId
   return (
     <form class="relative shrink-0 border-t border-zinc-800 bg-zinc-900 p-3 md:px-6" onSubmit={submit}>
       {pickerOpen && <StickerPicker peerId={peerId} onSent={() => setPickerOpen(false)} />}
+      {reply && (
+        <div class="mx-auto mb-2 flex max-w-3xl items-center gap-3 rounded-xl border-l-2 border-sky-400 bg-zinc-800 px-3 py-2">
+          <div class="min-w-0 flex-1">
+            <p class="truncate text-xs font-medium text-sky-300">
+              {reply.quote ? 'Reply to selection' : `Reply to ${reply.message.sender.displayName}`}
+            </p>
+            <p class="truncate text-xs text-zinc-400">{reply.quote?.text || reply.message.text || 'Attachment'}</p>
+          </div>
+          <button type="button" class="icon-button size-7" onClick={onCancelReply} aria-label="Cancel reply">×</button>
+        </div>
+      )}
       {showMenu && matches.length > 0 && (
         <div class="absolute bottom-full left-1/2 z-20 mb-2 w-full max-w-3xl -translate-x-1/2 px-3 md:px-6">
           <div class="flex max-h-64 flex-col overflow-y-auto rounded-2xl border border-zinc-700 bg-zinc-900 py-1 shadow-2xl shadow-black/50">
