@@ -13,6 +13,7 @@
   "dependencies": {
     "@mtcute/web": "^0.32.0",
     "@tanstack/preact-query": "^5.102.8",
+    "emojibase-data": "^17.0.0",
     "lottie-web": "^5.13.0",
     "preact": "latest",
     "preact-iso": "^2.12.2"
