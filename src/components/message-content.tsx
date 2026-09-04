@@ -139,7 +139,7 @@ function VideoView({ message, telegram }: { message: Message; telegram: Telefast
           ref={videoRef}
           class="block w-full rounded-lg bg-zinc-900 object-contain"
           style={{ aspectRatio: `${video.width} / ${video.height}` }}
-          src={url}
+          src={visible ? url : undefined}
           poster={poster.data}
           controls={!video.isAnimation}
           loop={video.isAnimation}
@@ -212,7 +212,7 @@ function DocumentView({ message, telegram }: { message: Message; telegram: Telef
         <video
           class="block w-full rounded-lg bg-zinc-900 object-contain"
           style={{ aspectRatio: `${width} / ${height}` }}
-          src={streamUrl}
+          src={visible ? streamUrl : undefined}
           poster={poster.data}
           controls
           playsInline

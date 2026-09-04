@@ -1,7 +1,15 @@
 # ToDo
 
+* Message search
+* Pinned messages
+* Infinite scroll
+* Scroll to bottom
+* Mute settings
+* Archive/delete chat
+
 # Bugs
 
 * Bot command could lead to previous message refresh. Now messages aren't updated.
 * Edit doesn't update message.
 * switch doesn't invalidate cache
+* Sometimes media url handler stack in loop
