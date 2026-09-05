@@ -18,6 +18,8 @@
   --app-message-out-text: #ffffff;
   --app-message-out-link: #e0f2fe;
   --app-message-out-link-hover: #ffffff;
+  --app-header-search-bg: #3f3f46;
+  --app-header-search-border: #52525b;
 }
 
 @media (prefers-color-scheme: light) {
@@ -50,6 +52,8 @@
     --app-message-out-text: #082f49;
     --app-message-out-link: #075985;
     --app-message-out-link-hover: #0c4a6e;
+    --app-header-search-bg: #ffffff;
+    --app-header-search-border: #e4e4e7;
   }
 }
 
@@ -104,6 +108,20 @@ button:disabled {
 }
 
 .field input:focus {
+  border-color: #0ea5e9;
+}
+
+.header-search {
+  border-color: var(--app-header-search-border);
+  background: var(--app-header-search-bg);
+}
+
+.header-search::placeholder {
+  color: #a1a1aa;
+  opacity: 1;
+}
+
+.header-search:focus {
   border-color: #0ea5e9;
 }
 

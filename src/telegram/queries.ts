@@ -83,16 +83,18 @@ function messageDate(message: import('@mtcute/web').Message) {
   return Math.floor(message.date.getTime() / 1000)
 }
 
-function useMessageHistory(peerId: string, threadId?: number, pinned = false, targetMessageId?: number) {
+function useMessageHistory(peerId: string, threadId?: number, pinned = false, targetMessageId?: number, searchQuery?: string) {
   const { client, status } = useTelegram()
   const queryClient = useQueryClient()
   const dialog = useDialog(peerId)
   const query = useInfiniteQuery({
     queryKey: targetMessageId != null
       ? telegramKeys.messageWindow(peerId, targetMessageId, threadId)
-      : pinned
-        ? telegramKeys.pinnedMessages(peerId, threadId)
-        : telegramKeys.messages(peerId, threadId),
+      : searchQuery != null
+        ? telegramKeys.messageSearch(peerId, searchQuery)
+        : pinned
+          ? telegramKeys.pinnedMessages(peerId, threadId)
+          : telegramKeys.messages(peerId, threadId),
     queryFn: async ({ pageParam }): Promise<MessageHistoryPage> => {
       const target = dialog.data ?? await resolveDialog(client!, queryClient, peerId)
 
@@ -138,25 +140,32 @@ function useMessageHistory(peerId: string, threadId?: number, pinned = false, ta
         }
       }
 
-      const result = pinned
+      const result = searchQuery != null
         ? await client!.searchMessages({
           chatId: target.peer,
-          threadId,
-          filter: SearchFilters.Pinned,
+          query: searchQuery,
           limit: 50,
           ...(pageParam ? { offset: pageParam as number } : {}),
         })
-        : threadId != null
+        : pinned
           ? await client!.searchMessages({
             chatId: target.peer,
             threadId,
+            filter: SearchFilters.Pinned,
             limit: 50,
             ...(pageParam ? { offset: pageParam as number } : {}),
           })
-          : await client!.getHistory(target.peer, {
-            limit: 50,
-            ...(pageParam ? { offset: pageParam as Exclude<HistoryPage['next'], number | null> } : {}),
-          })
+          : threadId != null
+            ? await client!.searchMessages({
+              chatId: target.peer,
+              threadId,
+              limit: 50,
+              ...(pageParam ? { offset: pageParam as number } : {}),
+            })
+            : await client!.getHistory(target.peer, {
+              limit: 50,
+              ...(pageParam ? { offset: pageParam as Exclude<HistoryPage['next'], number | null> } : {}),
+            })
       return {
         messages: [...result].reverse(),
         next: (result.next ?? null) as HistoryPage['next'],
@@ -168,7 +177,7 @@ function useMessageHistory(peerId: string, threadId?: number, pinned = false, ta
       : null as HistoryPage['next'],
     getNextPageParam: (page) => page.next ?? undefined,
     getPreviousPageParam: (page) => page.previous,
-    enabled: status === 'authenticated' && Boolean(client && dialog.data),
+    enabled: status === 'authenticated' && Boolean(client && dialog.data && (searchQuery == null || searchQuery)),
     staleTime: Infinity,
   })
 
@@ -181,8 +190,14 @@ function useMessageHistory(peerId: string, threadId?: number, pinned = false, ta
   return { ...query, messages, total, dialog: dialog.data, dialogError: dialog.error }
 }
 
-export function useMessages(peerId: string, threadId?: number, pinned = false, targetMessageId?: number) {
-  return useMessageHistory(peerId, threadId, pinned, targetMessageId)
+export function useMessages(
+  peerId: string,
+  threadId?: number,
+  pinned = false,
+  targetMessageId?: number,
+  searchQuery?: string,
+) {
+  return useMessageHistory(peerId, threadId, pinned, targetMessageId, searchQuery)
 }
 
 export function usePinnedMessages(peerId: string, threadId?: number) {
@@ -362,6 +377,7 @@ export function useSetMessagePinned(peerId: string, threadId?: number) {
         queryClient.invalidateQueries({ queryKey: telegramKeys.pinnedMessages(peerId, threadId) }),
         queryClient.invalidateQueries({ queryKey: telegramKeys.messages(peerId, threadId) }),
         queryClient.invalidateQueries({ queryKey: telegramKeys.messageWindows(peerId) }),
+        queryClient.invalidateQueries({ queryKey: telegramKeys.messageSearches(peerId) }),
       ])
     },
   })
@@ -407,10 +423,15 @@ export function useDeleteMessage(peerId: string, threadId?: number) {
       await client!.deleteMessages([message], { revoke })
       return message.id
     },
-    onSuccess: (messageId) => {
+    onSuccess: async (messageId) => {
       removeMessage(queryClient, peerId, messageId, threadId)
-      void queryClient.invalidateQueries({ queryKey: telegramKeys.dialogs() })
-    },
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: telegramKeys.dialogs() }),
+        queryClient.invalidateQueries({ queryKey: telegramKeys.pinnedMessages(peerId, threadId) }),
+        queryClient.invalidateQueries({ queryKey: telegramKeys.messageSearches(peerId) }),
+        queryClient.invalidateQueries({ queryKey: telegramKeys.messageWindows(peerId) }),
+      ])
+    }
   })
 }
 

@@ -30,6 +30,7 @@ export function MessageList({
   threadId,
   targetMessageId,
   pinned = false,
+  searchQuery,
   canPinMessages = false,
   onReply,
   onEdit,
@@ -39,13 +40,14 @@ export function MessageList({
   threadId?: number
   targetMessageId?: number
   pinned?: boolean
+  searchQuery?: string
   canPinMessages?: boolean
   onReply: (reply: MessageReplyTarget) => void
   onEdit: (message: Message) => void
 }) {
   const { client } = useTelegram()
   const location = useLocation()
-  const history = useMessages(peerId, threadId, pinned, pinned ? undefined : targetMessageId)
+  const history = useMessages(peerId, threadId, pinned, pinned ? undefined : targetMessageId, searchQuery)
   const containerRef = useRef<HTMLDivElement | null>(null)
   const olderSentinelRef = useRef<HTMLDivElement | null>(null)
   const newerSentinelRef = useRef<HTMLDivElement | null>(null)
@@ -74,13 +76,13 @@ export function MessageList({
     targetMessageId: undefined as number | undefined,
     done: false,
   })
-  const chatKey = `${peerId}:${threadId ?? ''}:${targetMessageId ?? ''}:${pinned ? 'pinned' : 'history'}`
+  const chatKey = `${peerId}:${threadId ?? ''}:${targetMessageId ?? ''}:${pinned ? 'pinned' : searchQuery ?? 'history'}`
 
   if (initialScrollRef.current.key !== chatKey) {
     initialScrollRef.current = {
       key: chatKey,
       lastReadIngoing: dialog.lastReadIngoing,
-      hasUnread: !pinned && threadId == null && dialog.unreadCount > 0,
+      hasUnread: !pinned && searchQuery == null && threadId == null && dialog.unreadCount > 0,
       targetMessageId,
       done: false,
     }
@@ -170,7 +172,7 @@ export function MessageList({
     const latestMessage = history.messages[history.messages.length - 1]
     const previousLatestId = previousLatestIdRef.current
     const latestChanged = previousLatestId != null && latestMessage?.id !== previousLatestId
-    const isNewOutgoing = targetMessageId == null && latestChanged && latestMessage?.isOutgoing === true
+    const isNewOutgoing = !pinned && searchQuery == null && targetMessageId == null && latestChanged && latestMessage?.isOutgoing === true
     previousLatestIdRef.current = latestMessage?.id
 
     if (!container || history.messages.length === 0) return
@@ -274,7 +276,7 @@ export function MessageList({
         {history.isError && <p class="my-auto text-center text-sm text-red-300">Failed to load messages.</p>}
         {!history.isPending && !history.isError && history.messages.length === 0 && (
           <p class="my-auto text-center text-sm text-zinc-500">
-            {pinned ? 'No pinned messages' : 'No messages'}
+            {pinned ? 'No pinned messages' : searchQuery != null ? 'No search results' : 'No messages'}
           </p>
         )}
         {history.messages.map((message) => (
@@ -384,8 +386,9 @@ export function MessageList({
             y={reactionMenu.y}
             placement={reactionMenu.placement}
             pinnedView={pinned}
+            filteredView={pinned || searchQuery != null}
             canPinMessages={canPinMessages}
-            onJump={pinned ? () => {
+            onJump={pinned || searchQuery != null ? () => {
               const query = new URLSearchParams()
               if (threadId != null) query.set('thread', String(threadId))
               query.set('message', String(reactionMenu.message.id))

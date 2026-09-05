@@ -8,6 +8,35 @@ import { Avatar } from './media'
 import { MessageList } from './message-list'
 import { MessageComposer } from './message-composer'
 
+function MessageSearchField({ peerId, initialQuery = '' }: { peerId: string; initialQuery?: string }) {
+  const location = useLocation()
+  const [query, setQuery] = useState(initialQuery)
+
+  useEffect(() => setQuery(initialQuery), [peerId, initialQuery])
+
+  return (
+    <form
+      class="ml-auto flex min-w-0 items-center self-center"
+      role="search"
+      onSubmit={(event) => {
+        event.preventDefault()
+        const value = query.trim()
+        if (!value) return
+        location.route(`/chat/${encodeURIComponent(peerId)}/search?q=${encodeURIComponent(value)}`)
+      }}
+    >
+      <input
+        type="search"
+        value={query}
+        onInput={(event) => setQuery(event.currentTarget.value)}
+        placeholder="Search messages"
+        aria-label="Search messages"
+        class="header-search h-9 w-32 rounded-lg border px-3 text-sm leading-none text-zinc-100 outline-none sm:w-48 lg:w-64"
+      />
+    </form>
+  )
+}
+
 export function Conversation({ peerId }: { peerId: string }) {
   const location = useLocation()
   const { client } = useTelegram()
@@ -44,10 +73,11 @@ export function Conversation({ peerId }: { peerId: string }) {
           />
           <strong class="truncate text-sm font-medium">{dialog.peer.displayName}</strong>
         </a>
+        <MessageSearchField peerId={peerId} />
         {pinnedMessages.total > 0 && (
           <a
             href={pinnedHref}
-            class="icon-button ml-auto grid-flow-col gap-1 px-2 text-xs"
+            class="icon-button grid-flow-col gap-1 px-2 text-xs"
             aria-label={`View ${pinnedMessages.total} pinned messages`}
             title="Pinned messages"
           >
@@ -102,6 +132,7 @@ export function PinnedConversation({ peerId }: { peerId: string }) {
       <header class="flex h-16 shrink-0 items-center gap-3 border-b border-zinc-800 bg-zinc-900/90 px-4 backdrop-blur">
         <a href={backHref} class="icon-button" aria-label="Back to chat">←</a>
         <strong class="text-sm font-medium">Pinned messages</strong>
+        <MessageSearchField peerId={peerId} />
       </header>
       <MessageList
         peerId={peerId}
@@ -112,6 +143,39 @@ export function PinnedConversation({ peerId }: { peerId: string }) {
         onReply={() => undefined}
         onEdit={() => undefined}
       />
+    </section>
+  )
+}
+
+export function SearchConversation({ peerId }: { peerId: string }) {
+  const location = useLocation()
+  const selected = useDialog(peerId)
+  const dialog = selected.data
+  const canPinMessages = useCanPinMessages(peerId)
+  const query = typeof location.query.q === 'string' ? location.query.q.trim() : ''
+  const backHref = `/chat/${encodeURIComponent(peerId)}`
+
+  if (!dialog) return <EmptyConversation message={selected.isError ? 'Chat not found' : 'Loading chat…'} />
+
+  return (
+    <section class="flex min-w-0 flex-1 flex-col bg-chat">
+      <header class="flex h-16 shrink-0 items-center gap-3 border-b border-zinc-800 bg-zinc-900/90 px-4 backdrop-blur">
+        <a href={backHref} class="icon-button" aria-label="Back to chat">←</a>
+        <strong class="text-sm font-medium">Search</strong>
+        <MessageSearchField peerId={peerId} initialQuery={query} />
+      </header>
+      {query ? (
+        <MessageList
+          peerId={peerId}
+          dialog={dialog}
+          searchQuery={query}
+          canPinMessages={canPinMessages.data === true}
+          onReply={() => undefined}
+          onEdit={() => undefined}
+        />
+      ) : (
+        <div class="grid min-h-0 flex-1 place-items-center text-sm text-zinc-500">Enter a search query</div>
+      )}
     </section>
   )
 }

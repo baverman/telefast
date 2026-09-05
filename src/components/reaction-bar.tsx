@@ -48,6 +48,7 @@ export function MessageContextMenu({
          y,
          placement,
          pinnedView = false,
+         filteredView = false,
          canPinMessages = false,
          onJump,
          onReply,
@@ -62,6 +63,7 @@ export function MessageContextMenu({
          y: number
          placement: 'above' | 'below'
          pinnedView?: boolean
+         filteredView?: boolean
          canPinMessages?: boolean
          onJump?: () => void
          onReply: (reply: MessageReplyTarget) => void
@@ -130,8 +132,8 @@ export function MessageContextMenu({
                    })}
                  </div>
                  {onJump && action('Jump to', () => { onJump(); onClose() })}
-                 {!pinnedView && action('Reply', () => { onReply({ message, quote }); onClose() })}
-                 {!pinnedView && message.isOutgoing && message.text && action('Edit', () => { onEdit(message); onClose() })}
+                 {!filteredView && action('Reply', () => { onReply({ message, quote }); onClose() })}
+                 {!filteredView && message.isOutgoing && message.text && action('Edit', () => { onEdit(message); onClose() })}
                  {canPinMessages && action(isPinned ? 'Unpin' : 'Pin', () => {
                    void setPinned.mutateAsync({ message, pinned: !isPinned }).then(onClose).catch(() => undefined)
                  }, setPinned.isPending)}
