@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'preact/hooks'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks'
 import { useLocation } from 'preact-iso'
 import type { Dialog, Message } from '@mtcute/web'
 import { useTelegram, isGroupPeer } from '../telegram/telegram-provider'
@@ -43,7 +43,16 @@ export function MessageList({
   const location = useLocation()
   const history = useMessages(peerId, threadId)
   const containerRef = useRef<HTMLDivElement | null>(null)
-  const previousCountRef = useRef(0)
+  const olderSentinelRef = useRef<HTMLDivElement | null>(null)
+  const previousLatestIdRef = useRef<number>()
+  const nearBottomRef = useRef(true)
+  const pendingOlderScrollRef = useRef<{
+    messageId?: string
+    oldestMessageId?: number
+    offset: number
+    scrollHeight: number
+    scrollTop: number
+  } | null>(null)
   const selectedQuoteRef = useRef<MessageReplyTarget['quote']>()
   const [reactionMenu, setReactionMenu] = useState<{
     message: Message
@@ -52,6 +61,7 @@ export function MessageList({
     y: number
     placement: 'above' | 'below'
   } | null>(null)
+  const [showScrollToLatest, setShowScrollToLatest] = useState(false)
   const initialScrollRef = useRef({
     key: '',
     lastReadIngoing: 0,
@@ -69,7 +79,9 @@ export function MessageList({
       targetMessageId,
       done: false,
     }
-    previousCountRef.current = 0
+    previousLatestIdRef.current = undefined
+    pendingOlderScrollRef.current = null
+    nearBottomRef.current = true
   }
 
   async function openComments(post: Message) {
@@ -83,18 +95,87 @@ export function MessageList({
     }
   }
 
+  function updateNearBottom(container: HTMLDivElement) {
+    const nearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 120
+    nearBottomRef.current = nearBottom
+    setShowScrollToLatest(!nearBottom)
+    return nearBottom
+  }
+
+  const loadOlder = useCallback(() => {
+    const container = containerRef.current
+    if (
+      !container
+      || !initialScrollRef.current.done
+      || !history.hasNextPage
+      || history.isFetchingNextPage
+      || pendingOlderScrollRef.current
+    ) return
+
+    const containerTop = container.getBoundingClientRect().top
+    const firstVisible = [...container.querySelectorAll<HTMLElement>('[data-message-id]')]
+      .find((message) => message.getBoundingClientRect().bottom > containerTop)
+
+    pendingOlderScrollRef.current = {
+      messageId: firstVisible?.dataset.messageId,
+      oldestMessageId: history.messages[0]?.id,
+      offset: firstVisible ? firstVisible.getBoundingClientRect().top - containerTop : 0,
+      scrollHeight: container.scrollHeight,
+      scrollTop: container.scrollTop,
+    }
+
+    void history.fetchNextPage().catch(() => {
+      pendingOlderScrollRef.current = null
+    })
+  }, [history.fetchNextPage, history.hasNextPage, history.isFetchingNextPage, history.messages])
+
   useEffect(() => {
     const container = containerRef.current
-    const count = history.messages.length
-    const previousCount = previousCountRef.current
-    const grew = count > previousCount
-    const isNewOutgoing = grew && history.messages[count - 1]?.isOutgoing === true
-    const nearBottom = container
-      ? container.scrollHeight - container.scrollTop - container.clientHeight < 120
-      : true
-    previousCountRef.current = count
+    const sentinel = olderSentinelRef.current
+    if (!container || !sentinel || !history.hasNextPage) return
 
-    if (!container || count === 0) return
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) loadOlder()
+    }, { root: container, rootMargin: '160px 0px 0px' })
+
+    observer.observe(sentinel)
+    return () => observer.disconnect()
+  }, [history.hasNextPage, loadOlder])
+
+  useLayoutEffect(() => {
+    const container = containerRef.current
+    const latestMessage = history.messages[history.messages.length - 1]
+    const previousLatestId = previousLatestIdRef.current
+    const latestChanged = previousLatestId != null && latestMessage?.id !== previousLatestId
+    const isNewOutgoing = latestChanged && latestMessage?.isOutgoing === true
+    previousLatestIdRef.current = latestMessage?.id
+
+    if (!container || history.messages.length === 0) return
+
+    const pendingOlderScroll = pendingOlderScrollRef.current
+    if (pendingOlderScroll) {
+      const oldestChanged = history.messages[0]?.id !== pendingOlderScroll.oldestMessageId
+      if (!oldestChanged && history.isFetchingNextPage) return
+      if (!oldestChanged) {
+        pendingOlderScrollRef.current = null
+        return
+      }
+      const anchor = pendingOlderScroll.messageId
+        ? container.querySelector<HTMLElement>(`[data-message-id="${pendingOlderScroll.messageId}"]`)
+        : null
+
+      if (anchor) {
+        const nextOffset = anchor.getBoundingClientRect().top - container.getBoundingClientRect().top
+        container.scrollTop += nextOffset - pendingOlderScroll.offset
+      } else {
+        container.scrollTop = pendingOlderScroll.scrollTop
+          + container.scrollHeight - pendingOlderScroll.scrollHeight
+      }
+      pendingOlderScrollRef.current = null
+      nearBottomRef.current = false
+      setShowScrollToLatest(true)
+      return
+    }
 
     const initialScroll = initialScrollRef.current
     if (!initialScroll.done) {
@@ -112,6 +193,7 @@ export function MessageList({
         if (target) target.scrollIntoView({ block: 'center' })
         else container.scrollTop = container.scrollHeight
         initialScroll.done = true
+        updateNearBottom(container)
         return
       }
       if (initialScroll.hasUnread) {
@@ -133,25 +215,37 @@ export function MessageList({
         container.scrollTop = container.scrollHeight
       }
       initialScroll.done = true
+      updateNearBottom(container)
       return
     }
 
-    if (isNewOutgoing || nearBottom) container.scrollTop = container.scrollHeight
+    if (isNewOutgoing || (latestChanged && nearBottomRef.current)) {
+      container.scrollTop = container.scrollHeight
+      nearBottomRef.current = true
+      setShowScrollToLatest(false)
+    }
   }, [history.messages, history.hasNextPage, history.isFetchingNextPage])
 
   return (
-    <div ref={containerRef} class="min-h-0 flex-1 overflow-y-auto px-4 py-6 md:px-8">
-      <div class="mx-auto flex min-h-full max-w-3xl flex-col justify-end gap-4">
+    <div class="relative min-h-0 flex-1">
+      <div
+        ref={containerRef}
+        class="h-full overflow-y-auto px-4 py-6 md:px-8"
+        onScroll={(event) => {
+          const container = event.currentTarget
+          updateNearBottom(container)
+          if (container.scrollTop < 160) loadOlder()
+        }}
+      >
+        <div class="mx-auto flex min-h-full max-w-3xl flex-col justify-end gap-4">
         {history.hasNextPage && (
-          <button
-            class="mx-auto mb-4 rounded-full border border-zinc-700 bg-zinc-900 px-4 py-2 text-xs text-zinc-300 hover:bg-zinc-800 disabled:opacity-50"
-            disabled={history.isFetchingNextPage}
-            onClick={() => {
-              void history.fetchNextPage()
-            }}
-          >
-            {history.isFetchingNextPage ? 'Loading…' : 'Load older messages'}
-          </button>
+          <div ref={olderSentinelRef} class="flex min-h-px justify-center">
+            {history.isFetchingNextPage && (
+              <span class="mb-4 rounded-full border border-zinc-700 bg-zinc-900 px-4 py-2 text-xs text-zinc-300">
+                Loading older messages…
+              </span>
+            )}
+          </div>
         )}
         {history.isPending && <p class="my-auto text-center text-sm text-zinc-500">Loading messages…</p>}
         {history.isError && <p class="my-auto text-center text-sm text-red-300">Failed to load messages.</p>}
@@ -257,7 +351,21 @@ export function MessageList({
             onClose={() => setReactionMenu(null)}
           />
         )}
+        </div>
       </div>
+      {showScrollToLatest && (
+        <button
+          type="button"
+          class="absolute bottom-4 right-4 z-20 grid size-11 place-items-center rounded-full border border-zinc-700 bg-zinc-900/95 text-xl text-zinc-100 shadow-lg shadow-black/40 backdrop-blur transition hover:bg-zinc-800 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-500"
+          aria-label="Scroll to latest messages"
+          title="Scroll to latest messages"
+          onClick={() => {
+            containerRef.current?.scrollTo({ top: containerRef.current.scrollHeight, behavior: 'smooth' })
+          }}
+        >
+          ↓
+        </button>
+      )}
     </div>
   )
 }
