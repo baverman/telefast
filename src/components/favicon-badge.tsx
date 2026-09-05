@@ -6,6 +6,11 @@ const DEFAULT_FAVICON = `data:image/svg+xml,${encodeURIComponent(
   '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="#0ea5e9"/><path d="M19 18h26v7h-9v22h-8V25h-9z" fill="#ffffff"/></svg>',
 )}`
 
+
+const DISCONNECTED_FAVICON = `data:image/svg+xml,${encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="#ef4444"/><path d="M19 18h26v7h-9v22h-8V25h-9z" fill="#ffffff"/></svg>',
+)}`
+
 function faviconLink() {
   const existing = document.querySelector<HTMLLinkElement>('link[rel="icon"]')
   if (existing) return existing
@@ -22,7 +27,11 @@ export function FaviconBadge() {
 
   useEffect(() => {
     const link = faviconLink()
-    if (status !== 'authenticated' || unread === 0) {
+    if (status !== 'authenticated') {
+      link.href = DISCONNECTED_FAVICON
+      return
+    }
+    if (unread === 0) {
       link.href = DEFAULT_FAVICON
       return
     }
