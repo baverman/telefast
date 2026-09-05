@@ -3,7 +3,7 @@ import { deserializeObject, serializeObject } from '@mtcute/web/utils.js'
 import type { TelefastClient } from '../telegram'
 
 const MEDIA_PATH = '/__telefast_media__/'
-const MEDIA_WORKER_VERSION = 13 // Increment for each media Service Worker update.
+const MEDIA_WORKER_VERSION = 14 // Increment for each media Service Worker update.
 const DOWNLOAD_PART_SIZE_KB = 1024
 const DOWNLOAD_PART_SIZE = DOWNLOAD_PART_SIZE_KB * 1024
 

@@ -1,10 +1,11 @@
 import { createContext, type ComponentChildren } from 'preact'
 import { useContext, useEffect, useRef, useState } from 'preact/hooks'
 import type { SentCode } from '@mtcute/web'
-import { useQueryClient } from '@tanstack/preact-query'
+import { QueryClient, QueryClientProvider } from '@tanstack/preact-query'
 import { useLocation } from 'preact-iso'
 import { createTelegramConnection, type TelefastClient } from '../telegram'
 import { activeChatPeerId } from './active-chat'
+import { openBlobCache, type BlobCache } from './blob-cache'
 import { appendMessage, cachedDialog, telegramKeys } from './query-data'
 import { setMediaStreamClient } from './media-stream'
 import { isGroupPeer, isSupportedPeer, messageText } from './model'
@@ -23,6 +24,35 @@ type Connection = ReturnType<typeof createTelegramConnection>
 
 const CONNECTION_TIMEOUT_MS = 30_000
 const RETRY_DELAY_MS = 5_000
+
+interface AccountResources {
+  accountId: string
+  blobCache: BlobCache
+  queryClient: QueryClient
+  unsubscribeQueryCache: () => void
+}
+
+function createAccountResources(accountId: string): AccountResources {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: { retry: 1, refetchOnWindowFocus: true, gcTime: 10 * 60_000 },
+      mutations: { retry: 0 },
+    },
+  })
+  const unsubscribeQueryCache = queryClient.getQueryCache().subscribe((event) => {
+    if (event.type !== 'removed') return
+    const key = event.query.queryKey
+    if (key[0] !== 'telegram' || key[1] !== 'media-url') return
+    const url = event.query.state.data
+    if (typeof url === 'string') URL.revokeObjectURL(url)
+  })
+  return { accountId, blobCache: openBlobCache(accountId), queryClient, unsubscribeQueryCache }
+}
+
+function discardAccountResources(resources: AccountResources) {
+  resources.queryClient.clear()
+  resources.unsubscribeQueryCache()
+}
 
 async function withConnectionTimeout<T>(operation: Promise<T>) {
   let timeout: ReturnType<typeof setTimeout> | undefined
@@ -52,6 +82,7 @@ interface TelegramContextValue {
   busy: boolean
   error: string
   client: TelefastClient | null
+  blobCache: BlobCache | null
   notificationPermission: NotificationPermission | 'unsupported'
   beginLogin(input: BeginLoginInput): Promise<void>
   submitCode(code: string): void
@@ -111,26 +142,32 @@ function codeDeliveryLabel(sentCode: SentCode) {
   }
 }
 
-export function TelegramProvider({ children }: { children: ComponentChildren }) {
+export function TelegramProvider({ children, fallback }: { children: ComponentChildren; fallback: ComponentChildren }) {
   const location = useLocation()
-  const queryClient = useQueryClient()
   const [status, setStatus] = useState<SessionStatus>('loading')
   const [authStep, setAuthStep] = useState<AuthStep>('credentials')
   const [passwordHint, setPasswordHint] = useState('')
   const [deliveryLabel, setDeliveryLabel] = useState('to your Telegram app')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [resources, setResources] = useState<AccountResources | null>(null)
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission | 'unsupported'>(
     typeof Notification === 'undefined' ? 'unsupported' : Notification.permission,
   )
   const connectionRef = useRef<Connection | null>(null)
+  const resourcesRef = useRef<AccountResources | null>(null)
   const recoveringConnectionRef = useRef(false)
   const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const codeResolver = useRef<Resolver | null>(null)
   const passwordResolver = useRef<Resolver | null>(null)
   const client = connectionRef.current?.client ?? null
 
-  function attachUpdates(telegram: TelefastClient) {
+  function queryClient() {
+    const current = resourcesRef.current?.queryClient
+    if (!current) throw new Error('Telegram account resources are not ready')
+    return current
+  }
+  function attachUpdates(telegram: TelefastClient, accountQueryClient: QueryClient) {
     telegram.onConnectionState.add((state) => {
       console.log('[Telefast] Telegram connection state:', state)
     })
@@ -144,8 +181,8 @@ export function TelegramProvider({ children }: { children: ComponentChildren }) 
       if (!isSupportedPeer(message.chat)) return
       const peerId = String(message.chat.id)
       const isCurrent = activeChatPeerId === peerId
-      appendMessage(queryClient, peerId, message)
-      const target = cachedDialog(queryClient, peerId)
+      appendMessage(accountQueryClient, peerId, message)
+      const target = cachedDialog(accountQueryClient, peerId)
 
       console.log('[Telefast] notification check', {
         peerId,
@@ -176,7 +213,7 @@ export function TelegramProvider({ children }: { children: ComponentChildren }) 
           notification.close()
         }
       }
-      void queryClient.invalidateQueries({ queryKey: telegramKeys.dialogs() })
+      void accountQueryClient.invalidateQueries({ queryKey: telegramKeys.dialogs() })
     })
   }
 
@@ -210,8 +247,8 @@ export function TelegramProvider({ children }: { children: ComponentChildren }) 
         return
       }
 
-      enterChats(replacement)
-      await queryClient.invalidateQueries({ queryKey: telegramKeys.all })
+      await enterChats(replacement)
+      await queryClient().invalidateQueries({ queryKey: telegramKeys.all })
       console.log('[Telefast] Telegram worker connection restored')
     } catch (recoveryError) {
       if (replacement) await replacement.destroy().catch(() => undefined)
@@ -234,14 +271,22 @@ export function TelegramProvider({ children }: { children: ComponentChildren }) 
       void reconnect()
     }, RETRY_DELAY_MS)
   }
-  function enterChats(connection: Connection) {
+  async function enterChats(connection: Connection) {
     if (retryTimerRef.current) {
       clearTimeout(retryTimerRef.current)
       retryTimerRef.current = null
     }
     connectionRef.current = connection
+    const accountId = String((await connection.client.getMe()).id)
+    let accountResources = resourcesRef.current
+    if (!accountResources || accountResources.accountId !== accountId) {
+      if (accountResources) discardAccountResources(accountResources)
+      accountResources = createAccountResources(accountId)
+      resourcesRef.current = accountResources
+      setResources(accountResources)
+    }
     setMediaStreamClient(connection.client)
-    attachUpdates(connection.client)
+    attachUpdates(connection.client, accountResources.queryClient)
     setStatus('authenticated')
     setBusy(false)
   }
@@ -264,7 +309,7 @@ export function TelegramProvider({ children }: { children: ComponentChildren }) 
           await connection.destroy()
           return
         }
-        enterChats(connection)
+        await enterChats(connection)
       } catch (startupError) {
         await connection.destroy()
         connectionRef.current = null
@@ -279,6 +324,10 @@ export function TelegramProvider({ children }: { children: ComponentChildren }) 
       if (retryTimerRef.current) clearTimeout(retryTimerRef.current)
     }
   }, [])
+
+  useEffect(() => {
+    if (status === 'unauthenticated' && location.path !== '/login') location.route('/login', true)
+  }, [status, location.path])
 
   async function reconnect() {
     if (recoveringConnectionRef.current) return
@@ -301,8 +350,8 @@ export function TelegramProvider({ children }: { children: ComponentChildren }) 
         await connection.destroy()
         return
       }
-      enterChats(connection)
-      await queryClient.invalidateQueries({ queryKey: telegramKeys.all })
+      await enterChats(connection)
+      await queryClient().invalidateQueries({ queryKey: telegramKeys.all })
     } catch (connectionError) {
       await connection.destroy().catch(() => undefined)
       if (connectionRef.current === connection) connectionRef.current = null
@@ -344,7 +393,7 @@ export function TelegramProvider({ children }: { children: ComponentChildren }) 
           setBusy(false)
         },
       })
-      enterChats(connection)
+      await enterChats(connection)
     } catch (authError) {
       setError(reportError('Telegram authentication failed', authError))
       setBusy(false)
@@ -375,11 +424,11 @@ export function TelegramProvider({ children }: { children: ComponentChildren }) 
 
   async function markRead(peerId: string) {
     const telegram = connectionRef.current?.client
-    const dialog = cachedDialog(queryClient, peerId)
+    const dialog = cachedDialog(queryClient(), peerId)
     if (!telegram || !dialog) return
     try {
       await telegram.readHistory(dialog.peer)
-      await queryClient.invalidateQueries({ queryKey: telegramKeys.dialogs() })
+      await queryClient().invalidateQueries({ queryKey: telegramKeys.dialogs() })
     } catch (error) {
       console.error('[Telefast] Failed to mark chat as read', error)
     }
@@ -405,7 +454,10 @@ export function TelegramProvider({ children }: { children: ComponentChildren }) 
     } finally {
       await connection.destroy()
       connectionRef.current = null
-      queryClient.clear()
+      const currentResources = resourcesRef.current
+      if (currentResources) discardAccountResources(currentResources)
+      resourcesRef.current = null
+      setResources(null)
       setAuthStep('credentials')
       setStatus('unauthenticated')
       setBusy(false)
@@ -415,11 +467,16 @@ export function TelegramProvider({ children }: { children: ComponentChildren }) 
 
   const value: TelegramContextValue = {
     status, authStep, passwordHint, deliveryLabel, busy, error, client,
+    blobCache: resources?.blobCache ?? null,
     notificationPermission, beginLogin, submitCode, submitPassword, logout, reconnect,
     clearError: () => setError(''), enableNotifications, markRead,
   }
 
-  return <TelegramContext.Provider value={value}>{children}</TelegramContext.Provider>
+  const content = status === 'authenticated' && resources
+    ? <QueryClientProvider client={resources.queryClient}>{children}</QueryClientProvider>
+    : fallback
+
+  return <TelegramContext.Provider value={value}>{content}</TelegramContext.Provider>
 }
 
 export function useTelegram() {

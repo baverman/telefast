@@ -11,3 +11,4 @@
 * Edit doesn't update message.
 * switch doesn't invalidate cache
 * Sometimes media url handler stack in loop
+* Sticker viewer doesn't show sticker keywords

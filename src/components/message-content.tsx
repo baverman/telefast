@@ -4,6 +4,7 @@ import type { FileLocation, Message, MessageAction } from '@mtcute/web'
 import type { TelefastClient } from '../telegram'
 import { cachedMediaUrl } from '../telegram/media-cache'
 import { streamedMediaUrl } from '../telegram/media-stream'
+import { useTelegram } from '../telegram/telegram-provider'
 import { MessageText, useVisible } from './media'
 
 const AUTO_IMAGE_LIMIT = 10 * 1024 * 1024
@@ -15,11 +16,13 @@ function useMediaUrl(
   mimeType: string,
   visible: boolean,
 ) {
+  const { blobCache } = useTelegram()
   return useQuery({
     queryKey: ['telegram', 'media-url', key],
-    queryFn: () => cachedMediaUrl(telegram!, key, source!, mimeType),
-    enabled: Boolean(telegram && source && visible),
-    staleTime: Infinity,
+    queryFn: () => cachedMediaUrl(blobCache!, telegram!, key, source!, mimeType),
+    enabled: Boolean(blobCache && telegram && source && visible),
+    staleTime: 'static',
+    gcTime: 10 * 60_000,
   })
 }
 

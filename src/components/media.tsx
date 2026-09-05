@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/preact-query'
 import type { Dialog, Message } from '@mtcute/web'
 import type { TelefastClient } from '../telegram'
 import { cachedMediaUrl } from '../telegram/media-cache'
+import { useTelegram } from '../telegram/telegram-provider'
 
 export function initials(name = '?') {
   return name.split(/\s+/).slice(0, 2).map((part) => part[0]).join('').toUpperCase()
@@ -132,27 +133,19 @@ export function Avatar({
   telegram: TelefastClient | null
   className: string
 }) {
+  const { blobCache } = useTelegram()
   const hostRef = useRef<HTMLSpanElement | null>(null)
   const visible = useVisible(hostRef, '160px')
   const photo = peer.photo?.small
   const photoKey = photo?.uniqueFileId ?? ''
   const avatar = useQuery({
-    queryKey: ['telegram', 'avatar', photoKey],
-    queryFn: () => telegram!.downloadAsBuffer(photo!),
-    enabled: Boolean(telegram && photo && visible),
-    staleTime: Infinity,
+    queryKey: ['telegram', 'media-url', `avatar-${photoKey}`],
+    queryFn: () => cachedMediaUrl(blobCache!, telegram!, `avatar-${photoKey}`, photo!, 'image/jpeg'),
+    enabled: Boolean(blobCache && telegram && photo && visible),
+    staleTime: 'static',
+    gcTime: 10 * 60_000,
   })
-  const [source, setSource] = useState('')
-
-  useEffect(() => {
-    if (!avatar.data) {
-      setSource('')
-      return
-    }
-    const url = URL.createObjectURL(new Blob([Uint8Array.from(avatar.data)], { type: 'image/jpeg' }))
-    setSource(url)
-    return () => URL.revokeObjectURL(url)
-  }, [avatar.data])
+  const source = avatar.data ?? ''
 
   return (
     <span ref={hostRef} class={`${className} overflow-hidden`} aria-hidden="true">
@@ -174,6 +167,7 @@ export function StickerView({
          compact?: boolean
          animate?: boolean
        }) {
+         const { blobCache } = useTelegram()
          const hostRef = useRef<HTMLDivElement | null>(null)
          const animationHostRef = useRef<HTMLDivElement | null>(null)
          const videoRef = useRef<HTMLVideoElement | null>(null)
@@ -189,19 +183,23 @@ export function StickerView({
          const previewing = compact && !animate && playable
          const thumbnail = sticker.thumbnails[sticker.thumbnails.length - 1]
          const mimeType = sticker.sourceType === 'video' ? 'video/webm' : 'image/webp'
+         const mediaKey = previewing ? `${sticker.uniqueFileId}:preview` : sticker.uniqueFileId
          const stickerQuery = useQuery({
-           queryKey: ['telegram', 'sticker-file', sticker.uniqueFileId, previewing ? 'preview' : 'full'],
+           queryKey: animated && !previewing
+             ? ['telegram', 'sticker-file', mediaKey]
+             : ['telegram', 'media-url', mediaKey],
            queryFn: async (): Promise<string | Uint8Array | null> => {
              if (!telegram) return null
              if (previewing) {
                if (!thumbnail) return null
-               return cachedMediaUrl(telegram, `${sticker.uniqueFileId}:preview`, thumbnail, 'image/jpeg')
+               return cachedMediaUrl(blobCache!, telegram, mediaKey, thumbnail, 'image/jpeg')
              }
              if (animated) return telegram.downloadAsBuffer(sticker)
-             return cachedMediaUrl(telegram, sticker.uniqueFileId, sticker, mimeType)
+             return cachedMediaUrl(blobCache!, telegram, mediaKey, sticker, mimeType)
            },
-           enabled: Boolean(telegram && visible),
-           staleTime: Infinity,
+           enabled: Boolean(blobCache && telegram && visible),
+           staleTime: 'static',
+           gcTime: 10 * 60_000,
          })
          const source = typeof stickerQuery.data === 'string' ? stickerQuery.data : ''
          const bytes = stickerQuery.data instanceof Uint8Array ? stickerQuery.data : undefined

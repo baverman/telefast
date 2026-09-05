@@ -172,7 +172,7 @@ async function mediaResponse(request, url, clientId, requestId, settleLifetime) 
   const headers = new Headers({
     'Content-Type': mimeType,
     'Accept-Ranges': 'bytes',
-    'Cache-Control': 'no-store',
+    // 'Cache-Control': 'no-store',
   })
   if (expectedLength != null) {
     headers.set('Content-Length', String(expectedLength))

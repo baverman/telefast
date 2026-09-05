@@ -20,17 +20,22 @@ function faviconLink() {
   return link
 }
 
-export function FaviconBadge() {
+export function SessionFavicon() {
   const { status } = useTelegram()
+
+  useEffect(() => {
+    if (status !== 'authenticated') faviconLink().href = DISCONNECTED_FAVICON
+  }, [status])
+
+  return null
+}
+
+export function UnreadFaviconBadge() {
   const dialogs = useDialogs()
   const unread = dialogs.data?.filter((dialog) => dialog.isMuted !== true).reduce((sum, dialog) => sum + dialog.unreadCount, 0) ?? 0
 
   useEffect(() => {
     const link = faviconLink()
-    if (status !== 'authenticated') {
-      link.href = DISCONNECTED_FAVICON
-      return
-    }
     if (unread === 0) {
       link.href = DEFAULT_FAVICON
       return
@@ -65,7 +70,7 @@ export function FaviconBadge() {
     context.fillText(label, 52, 12)
 
     link.href = canvas.toDataURL('image/png')
-  }, [status, unread])
+  }, [unread])
 
   return null
 }

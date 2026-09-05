@@ -3,7 +3,6 @@ import { Route, Router, useLocation } from 'preact-iso'
 import { dialogId, useTelegram } from '../telegram/telegram-provider'
 import { useDialogs } from '../telegram/queries'
 import { setActiveChatPeerId } from '../telegram/active-chat'
-import { RequireAuth } from '../routing/require-auth'
 import { ChatSidebar } from './chat-sidebar'
 import { Conversation, EmptyConversation, PinnedConversation, SearchConversation } from './conversation'
 import { PeerInfo } from './peer-info'
@@ -28,26 +27,24 @@ export function ChatLayout() {
   }, [selectedPeerId, hasUnread])
 
   return (
-    <RequireAuth>
-      <main class="flex h-screen overflow-hidden bg-zinc-950 text-zinc-100">
-        <ChatSidebar selectedPeerId={selectedPeerId} />
-        <div class="flex min-h-0 min-w-0 flex-1 overflow-hidden">
-          <Router>
-            <Route path="/" component={EmptyConversation} />
-            <Route path="/:peerId" component={Conversation} />
-            <Route path="/:peerId/pinned" component={PinnedConversation} />
-            <Route path="/:peerId/search" component={SearchConversation} />
-            <Route path="/:peerId/info" component={PeerInfo} />
-            <Route default component={EmptyConversation} message="Page not found" />
-          </Router>
-        </div>
-        {error && (
-          <button
-            class="fixed bottom-20 left-1/2 z-20 -translate-x-1/2 rounded-xl border border-red-900/60 bg-red-950 px-4 py-3 text-sm text-red-200 shadow-xl"
-            onClick={clearError}
-          >{error}</button>
-        )}
-      </main>
-    </RequireAuth>
+    <main class="flex h-screen overflow-hidden bg-zinc-950 text-zinc-100">
+      <ChatSidebar selectedPeerId={selectedPeerId} />
+      <div class="flex min-h-0 min-w-0 flex-1 overflow-hidden">
+        <Router>
+          <Route path="/" component={EmptyConversation} />
+          <Route path="/:peerId" component={Conversation} />
+          <Route path="/:peerId/pinned" component={PinnedConversation} />
+          <Route path="/:peerId/search" component={SearchConversation} />
+          <Route path="/:peerId/info" component={PeerInfo} />
+          <Route default component={EmptyConversation} message="Page not found" />
+        </Router>
+      </div>
+      {error && (
+        <button
+          class="fixed bottom-20 left-1/2 z-20 -translate-x-1/2 rounded-xl border border-red-900/60 bg-red-950 px-4 py-3 text-sm text-red-200 shadow-xl"
+          onClick={clearError}
+        >{error}</button>
+      )}
+    </main>
   )
 }
