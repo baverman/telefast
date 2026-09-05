@@ -363,7 +363,13 @@ export function MessageList({
                 </button>
               )}
               {!message.isService && <ReactionBar message={message} peerId={peerId} threadId={threadId} />}
-              <time class="ml-auto text-[10px] text-zinc-400/80">{timeLabel(message.date)}</time>
+              <time
+                class="ml-auto text-[10px] text-zinc-400/80"
+                dateTime={message.date.toISOString()}
+                title={message.date.toLocaleString(undefined, { dateStyle: 'full', timeStyle: 'long' })}
+              >
+                {timeLabel(message.date)}
+              </time>
             </div>
           </article>
         ))}
