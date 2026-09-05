@@ -81,7 +81,9 @@ export function Conversation({ peerId }: { peerId: string }) {
             aria-label={`View ${pinnedMessages.total} pinned messages`}
             title="Pinned messages"
           >
-            <span aria-hidden="true">📌</span>
+            <svg aria-hidden="true" viewBox="0 0 24 24" class="size-4" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 17v5M5 17h14M17 17v-5l-2-2V5h1V2H8v3h1v5l-2 2v5" />
+            </svg>
             <span class="tabular-nums">{pinnedMessages.total}</span>
           </a>
         )}
