@@ -166,7 +166,7 @@ export function MessageComposer({
       )}
       <div class="mx-auto flex max-w-3xl items-center gap-2">
         <button
-          class={`grid size-11 shrink-0 place-items-center rounded-full border text-lg transition ${pickerOpen ? 'border-sky-500 bg-sky-500/15' : 'border-zinc-700 bg-zinc-800 hover:bg-zinc-700'}`}
+          class={`grid size-11 shrink-0 place-items-center rounded-full border text-lg transition ${pickerOpen ? 'border-sky-500 bg-sky-500/15' : 'border-[var(--app-field-border)] bg-[var(--app-field-bg)] hover:bg-[var(--app-hover-bg)]'}`}
           type="button"
           onClick={() => setPickerOpen((open) => !open)}
           aria-label="Open sticker picker"
@@ -174,7 +174,7 @@ export function MessageComposer({
         >◇</button>
         <textarea
           ref={inputRef}
-          class="max-h-36 min-h-11 flex-1 resize-none rounded-2xl border border-zinc-700 bg-zinc-800 px-4 py-3 text-sm outline-none placeholder:text-zinc-500 focus:border-sky-500"
+          class="max-h-36 min-h-11 flex-1 resize-none rounded-2xl border border-zinc-700 bg-[var(--app-field-bg)] px-4 py-3 text-sm outline-none focus:border-sky-500"
           rows={1}
           value={draft}
           onInput={(event) => setDraft(event.currentTarget.value)}
