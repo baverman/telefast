@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'preact/hooks'
 import type { Message } from '@mtcute/web'
-import { useDeleteMessage, useDialogs, useForwardMessage, useSendReaction, type MessageReplyTarget } from '../telegram/queries'
+import { useDeleteMessage, useDialogs, useForwardMessage, useSendReaction, useSetMessagePinned, type MessageReplyTarget } from '../telegram/queries'
 import { canSendMessages } from '../telegram/model'
 import { MessageStickerPackViewer } from './sticker-picker'
 
@@ -47,6 +47,9 @@ export function MessageContextMenu({
          x,
          y,
          placement,
+         pinnedView = false,
+         canPinMessages = false,
+         onJump,
          onReply,
          onEdit,
          onClose,
@@ -58,6 +61,9 @@ export function MessageContextMenu({
          x: number
          y: number
          placement: 'above' | 'below'
+         pinnedView?: boolean
+         canPinMessages?: boolean
+         onJump?: () => void
          onReply: (reply: MessageReplyTarget) => void
          onEdit: (message: Message) => void
          onClose: () => void
@@ -65,12 +71,14 @@ export function MessageContextMenu({
          const [view, setView] = useState<'menu' | 'sticker-pack' | 'forward' | 'delete'>('menu')
          const react = useSendReaction(peerId, threadId)
          const remove = useDeleteMessage(peerId, threadId)
+         const setPinned = useSetMessagePinned(peerId, threadId)
          const forward = useForwardMessage()
          const dialogs = useDialogs()
          const reactions = message.reactions?.reactions ?? []
          const sticker = message.media?.type === 'sticker' ? message.media : null
+         const isPinned = pinnedView || message.isPinned
          const isActive = (emoji: string) => reactions.some((reaction) => reaction.emoji === emoji && reaction.order !== null)
-         const error = remove.error ?? forward.error
+         const error = remove.error ?? forward.error ?? setPinned.error
 
          useEffect(() => {
            function onKeyDown(event: KeyboardEvent) {
@@ -121,8 +129,12 @@ export function MessageContextMenu({
                      )
                    })}
                  </div>
-                 {action('Reply', () => { onReply({ message, quote }); onClose() })}
-                 {message.isOutgoing && message.text && action('Edit', () => { onEdit(message); onClose() })}
+                 {onJump && action('Jump to', () => { onJump(); onClose() })}
+                 {!pinnedView && action('Reply', () => { onReply({ message, quote }); onClose() })}
+                 {!pinnedView && message.isOutgoing && message.text && action('Edit', () => { onEdit(message); onClose() })}
+                 {canPinMessages && action(isPinned ? 'Unpin' : 'Pin', () => {
+                   void setPinned.mutateAsync({ message, pinned: !isPinned }).then(onClose).catch(() => undefined)
+                 }, setPinned.isPending)}
                  {sticker?.hasStickerSet && action('View sticker pack', () => setView('sticker-pack'))}
                  {action('Forward…', () => setView('forward'), !message.canBeForwarded)}
                  {action('Delete…', () => setView('delete'), false, true)}

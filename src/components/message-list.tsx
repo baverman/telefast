@@ -29,6 +29,8 @@ export function MessageList({
   dialog,
   threadId,
   targetMessageId,
+  pinned = false,
+  canPinMessages = false,
   onReply,
   onEdit,
 }: {
@@ -36,14 +38,17 @@ export function MessageList({
   dialog: Dialog
   threadId?: number
   targetMessageId?: number
+  pinned?: boolean
+  canPinMessages?: boolean
   onReply: (reply: MessageReplyTarget) => void
   onEdit: (message: Message) => void
 }) {
   const { client } = useTelegram()
   const location = useLocation()
-  const history = useMessages(peerId, threadId)
+  const history = useMessages(peerId, threadId, pinned, pinned ? undefined : targetMessageId)
   const containerRef = useRef<HTMLDivElement | null>(null)
   const olderSentinelRef = useRef<HTMLDivElement | null>(null)
+  const newerSentinelRef = useRef<HTMLDivElement | null>(null)
   const previousLatestIdRef = useRef<number>()
   const nearBottomRef = useRef(true)
   const pendingOlderScrollRef = useRef<{
@@ -69,13 +74,13 @@ export function MessageList({
     targetMessageId: undefined as number | undefined,
     done: false,
   })
-  const chatKey = `${peerId}:${threadId ?? ''}:${targetMessageId ?? ''}`
+  const chatKey = `${peerId}:${threadId ?? ''}:${targetMessageId ?? ''}:${pinned ? 'pinned' : 'history'}`
 
   if (initialScrollRef.current.key !== chatKey) {
     initialScrollRef.current = {
       key: chatKey,
       lastReadIngoing: dialog.lastReadIngoing,
-      hasUnread: threadId == null && dialog.unreadCount > 0,
+      hasUnread: !pinned && threadId == null && dialog.unreadCount > 0,
       targetMessageId,
       done: false,
     }
@@ -129,6 +134,11 @@ export function MessageList({
     })
   }, [history.fetchNextPage, history.hasNextPage, history.isFetchingNextPage, history.messages])
 
+  const loadNewer = useCallback(() => {
+    if (!targetMessageId || !history.hasPreviousPage || history.isFetchingPreviousPage) return
+    void history.fetchPreviousPage()
+  }, [history.fetchPreviousPage, history.hasPreviousPage, history.isFetchingPreviousPage, targetMessageId])
+
   useEffect(() => {
     const container = containerRef.current
     const sentinel = olderSentinelRef.current
@@ -142,12 +152,25 @@ export function MessageList({
     return () => observer.disconnect()
   }, [history.hasNextPage, loadOlder])
 
+  useEffect(() => {
+    const container = containerRef.current
+    const sentinel = newerSentinelRef.current
+    if (!container || !sentinel || !history.hasPreviousPage) return
+
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) loadNewer()
+    }, { root: container, rootMargin: '0px 0px 160px' })
+
+    observer.observe(sentinel)
+    return () => observer.disconnect()
+  }, [history.hasPreviousPage, loadNewer])
+
   useLayoutEffect(() => {
     const container = containerRef.current
     const latestMessage = history.messages[history.messages.length - 1]
     const previousLatestId = previousLatestIdRef.current
     const latestChanged = previousLatestId != null && latestMessage?.id !== previousLatestId
-    const isNewOutgoing = latestChanged && latestMessage?.isOutgoing === true
+    const isNewOutgoing = targetMessageId == null && latestChanged && latestMessage?.isOutgoing === true
     previousLatestIdRef.current = latestMessage?.id
 
     if (!container || history.messages.length === 0) return
@@ -181,11 +204,6 @@ export function MessageList({
     if (!initialScroll.done) {
       if (initialScroll.targetMessageId != null) {
         const targetMessage = history.messages.find((message) => message.id === initialScroll.targetMessageId)
-        const oldestMessage = history.messages[0]
-        if (!targetMessage && oldestMessage.id > initialScroll.targetMessageId && history.hasNextPage) {
-          if (!history.isFetchingNextPage) void history.fetchNextPage()
-          return
-        }
 
         const target = targetMessage
           ? container.querySelector<HTMLElement>(`[data-message-id="${targetMessage.id}"]`)
@@ -215,6 +233,11 @@ export function MessageList({
         container.scrollTop = container.scrollHeight
       }
       initialScroll.done = true
+      updateNearBottom(container)
+      return
+    }
+
+    if (targetMessageId != null && latestChanged) {
       updateNearBottom(container)
       return
     }
@@ -249,16 +272,21 @@ export function MessageList({
         )}
         {history.isPending && <p class="my-auto text-center text-sm text-zinc-500">Loading messages…</p>}
         {history.isError && <p class="my-auto text-center text-sm text-red-300">Failed to load messages.</p>}
+        {!history.isPending && !history.isError && history.messages.length === 0 && (
+          <p class="my-auto text-center text-sm text-zinc-500">
+            {pinned ? 'No pinned messages' : 'No messages'}
+          </p>
+        )}
         {history.messages.map((message) => (
           <article
             key={message.id}
             data-message-id={message.id}
-            class={message.isService
+            class={`${message.isService
               ? 'message-service'
               : `group relative ${message.media?.type === 'sticker'
                   ? `sticker-message ${message.isOutgoing ? 'sticker-out' : 'sticker-in'}`
                   : `message-bubble ${message.isOutgoing ? 'message-out' : 'message-in'}`}`
-            }
+            }${message.id === targetMessageId ? ' target-message' : ''}`}
           >
             {isGroupPeer(dialog.peer) && !message.isService && (
               <a
@@ -337,6 +365,15 @@ export function MessageList({
             </div>
           </article>
         ))}
+        {targetMessageId != null && history.hasPreviousPage && (
+          <div ref={newerSentinelRef} class="flex min-h-px justify-center">
+            {history.isFetchingPreviousPage && (
+              <span class="mt-4 rounded-full border border-zinc-700 bg-zinc-900 px-4 py-2 text-xs text-zinc-300">
+                Loading newer messages…
+              </span>
+            )}
+          </div>
+        )}
         {reactionMenu && (
           <MessageContextMenu
             message={reactionMenu.message}
@@ -346,6 +383,14 @@ export function MessageList({
             x={reactionMenu.x}
             y={reactionMenu.y}
             placement={reactionMenu.placement}
+            pinnedView={pinned}
+            canPinMessages={canPinMessages}
+            onJump={pinned ? () => {
+              const query = new URLSearchParams()
+              if (threadId != null) query.set('thread', String(threadId))
+              query.set('message', String(reactionMenu.message.id))
+              location.route(`/chat/${encodeURIComponent(peerId)}?${query}`)
+            } : undefined}
             onReply={onReply}
             onEdit={onEdit}
             onClose={() => setReactionMenu(null)}
@@ -357,9 +402,15 @@ export function MessageList({
         <button
           type="button"
           class="absolute bottom-4 right-4 z-20 grid size-11 place-items-center rounded-full border border-zinc-700 bg-zinc-900/95 text-xl text-zinc-100 shadow-lg shadow-black/40 backdrop-blur transition hover:bg-zinc-800 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-500"
-          aria-label="Scroll to latest messages"
-          title="Scroll to latest messages"
+          aria-label={targetMessageId != null ? 'Go to latest messages' : 'Scroll to latest messages'}
+          title={targetMessageId != null ? 'Go to latest messages' : 'Scroll to latest messages'}
           onClick={() => {
+            if (targetMessageId != null) {
+              const query = new URLSearchParams()
+              if (threadId != null) query.set('thread', String(threadId))
+              location.route(`/chat/${encodeURIComponent(peerId)}${query.size ? `?${query}` : ''}`)
+              return
+            }
             containerRef.current?.scrollTo({ top: containerRef.current.scrollHeight, behavior: 'smooth' })
           }}
         >

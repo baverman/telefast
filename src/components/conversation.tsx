@@ -2,7 +2,7 @@ import { useEffect, useState } from 'preact/hooks'
 import { useLocation } from 'preact-iso'
 import type { Message } from '@mtcute/web'
 import { useTelegram } from '../telegram/telegram-provider'
-import { useDialog, type MessageReplyTarget } from '../telegram/queries'
+import { useCanPinMessages, useDialog, usePinnedMessages, type MessageReplyTarget } from '../telegram/queries'
 import { canSendMessages } from '../telegram/model'
 import { Avatar } from './media'
 import { MessageList } from './message-list'
@@ -17,9 +17,14 @@ export function Conversation({ peerId }: { peerId: string }) {
   const [edit, setEdit] = useState<Message | null>(null)
   const threadId = Number.isSafeInteger(Number(location.query.thread)) ? Number(location.query.thread) : undefined
   const targetMessageId = Number.isSafeInteger(Number(location.query.message)) ? Number(location.query.message) : undefined
+  const pinnedMessages = usePinnedMessages(peerId, threadId)
+  const canPinMessages = useCanPinMessages(peerId)
   const infoQuery = new URLSearchParams()
   if (threadId != null) infoQuery.set('thread', String(threadId))
   const infoHref = `/chat/${encodeURIComponent(peerId)}/info${infoQuery.size ? `?${infoQuery}` : ''}`
+  const pinnedQuery = new URLSearchParams()
+  if (threadId != null) pinnedQuery.set('thread', String(threadId))
+  const pinnedHref = `/chat/${encodeURIComponent(peerId)}/pinned${pinnedQuery.size ? `?${pinnedQuery}` : ''}`
 
   useEffect(() => { setReply(null); setEdit(null) }, [peerId])
   if (!dialog) return <EmptyConversation message={selected.isError ? 'Chat not found' : 'Loading chat…'} />
@@ -39,12 +44,24 @@ export function Conversation({ peerId }: { peerId: string }) {
           />
           <strong class="truncate text-sm font-medium">{dialog.peer.displayName}</strong>
         </a>
+        {pinnedMessages.total > 0 && (
+          <a
+            href={pinnedHref}
+            class="icon-button ml-auto grid-flow-col gap-1 px-2 text-xs"
+            aria-label={`View ${pinnedMessages.total} pinned messages`}
+            title="Pinned messages"
+          >
+            <span aria-hidden="true">📌</span>
+            <span class="tabular-nums">{pinnedMessages.total}</span>
+          </a>
+        )}
       </header>
       <MessageList
         peerId={peerId}
         dialog={dialog}
         threadId={threadId}
         targetMessageId={targetMessageId}
+        canPinMessages={canPinMessages.data === true}
         onReply={(target) => { setEdit(null); setReply(target) }}
         onEdit={(message) => { setReply(null); setEdit(message) }}
       />
@@ -64,6 +81,37 @@ export function Conversation({ peerId }: { peerId: string }) {
             You can't send messages here
           </div>
         )}
+    </section>
+  )
+}
+
+export function PinnedConversation({ peerId }: { peerId: string }) {
+  const location = useLocation()
+  const selected = useDialog(peerId)
+  const dialog = selected.data
+  const canPinMessages = useCanPinMessages(peerId)
+  const threadId = Number.isSafeInteger(Number(location.query.thread)) ? Number(location.query.thread) : undefined
+  const backQuery = new URLSearchParams()
+  if (threadId != null) backQuery.set('thread', String(threadId))
+  const backHref = `/chat/${encodeURIComponent(peerId)}${backQuery.size ? `?${backQuery}` : ''}`
+
+  if (!dialog) return <EmptyConversation message={selected.isError ? 'Chat not found' : 'Loading chat…'} />
+
+  return (
+    <section class="flex min-w-0 flex-1 flex-col bg-chat">
+      <header class="flex h-16 shrink-0 items-center gap-3 border-b border-zinc-800 bg-zinc-900/90 px-4 backdrop-blur">
+        <a href={backHref} class="icon-button" aria-label="Back to chat">←</a>
+        <strong class="text-sm font-medium">Pinned messages</strong>
+      </header>
+      <MessageList
+        peerId={peerId}
+        dialog={dialog}
+        threadId={threadId}
+        pinned
+        canPinMessages={canPinMessages.data === true}
+        onReply={() => undefined}
+        onEdit={() => undefined}
+      />
     </section>
   )
 }

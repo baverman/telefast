@@ -19,6 +19,13 @@ export const telegramKeys = {
   messages: (peerId: string, threadId?: number) => threadId != null
     ? ['telegram', 'messages', peerId, 'thread', String(threadId)] as const
     : ['telegram', 'messages', peerId] as const,
+  pinnedMessages: (peerId: string, threadId?: number) => threadId != null
+    ? ['telegram', 'pinned-messages', peerId, 'thread', String(threadId)] as const
+    : ['telegram', 'pinned-messages', peerId] as const,
+  messageWindows: (peerId: string) => ['telegram', 'message-window', peerId] as const,
+  messageWindow: (peerId: string, messageId: number, threadId?: number) => threadId != null
+    ? ['telegram', 'message-window', peerId, String(messageId), 'thread', String(threadId)] as const
+    : ['telegram', 'message-window', peerId, String(messageId)] as const,
   stickers: () => ['telegram', 'stickers'] as const,
 }
 

@@ -1,4 +1,4 @@
-import { Long, Sticker, type Dialog, type StickerSet, type tl } from '@mtcute/web'
+import { Long, SearchFilters, Sticker, type Dialog, type StickerSet, type tl } from '@mtcute/web'
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/preact-query'
 import { useMemo } from 'preact/hooks'
 import { useTelegram } from './telegram-provider'
@@ -67,29 +67,107 @@ export function useDialog(peerId?: string) {
   })
 }
 
-export function useMessages(peerId: string, threadId?: number) {
+type MessageWindowPageParam = {
+  direction: 'center' | 'older' | 'newer'
+  id: number
+  date?: number
+}
+
+type MessageHistoryPage = Omit<HistoryPage, 'next'> & {
+  next: HistoryPage['next'] | MessageWindowPageParam
+  total?: number
+  previous?: MessageWindowPageParam
+}
+
+function messageDate(message: import('@mtcute/web').Message) {
+  return Math.floor(message.date.getTime() / 1000)
+}
+
+function useMessageHistory(peerId: string, threadId?: number, pinned = false, targetMessageId?: number) {
   const { client, status } = useTelegram()
   const queryClient = useQueryClient()
   const dialog = useDialog(peerId)
   const query = useInfiniteQuery({
-    queryKey: telegramKeys.messages(peerId, threadId),
-    queryFn: async ({ pageParam }): Promise<HistoryPage> => {
+    queryKey: targetMessageId != null
+      ? telegramKeys.messageWindow(peerId, targetMessageId, threadId)
+      : pinned
+        ? telegramKeys.pinnedMessages(peerId, threadId)
+        : telegramKeys.messages(peerId, threadId),
+    queryFn: async ({ pageParam }): Promise<MessageHistoryPage> => {
       const target = dialog.data ?? await resolveDialog(client!, queryClient, peerId)
-      const result = threadId != null
+
+      if (targetMessageId != null) {
+        const window = pageParam as MessageWindowPageParam
+        let result
+        if (threadId != null) {
+          result = await client!.searchMessages({
+            chatId: target.peer,
+            threadId,
+            limit: 50,
+            offset: window.id,
+            ...(window.direction === 'center' ? { addOffset: -25 } : {}),
+            ...(window.direction === 'newer' ? { addOffset: -50 } : {}),
+          })
+        } else {
+          let date = window.date
+          if (date == null) {
+            const [targetMessage] = await client!.getMessages(target.peer, window.id)
+            if (!targetMessage) throw new Error('Message not found')
+            date = messageDate(targetMessage)
+          }
+          result = await client!.getHistory(target.peer, {
+            limit: 50,
+            offset: { id: window.id, date },
+            ...(window.direction === 'center' ? { addOffset: -25 } : {}),
+            ...(window.direction === 'newer' ? { reverse: true } : {}),
+          })
+        }
+
+        const messages = [...result].sort((left, right) => left.id - right.id)
+        const oldest = messages[0]
+        const newest = messages[messages.length - 1]
+        const foundNewer = newest != null && newest.id > window.id
+        return {
+          messages,
+          next: window.direction !== 'newer' && result.next && oldest
+            ? { direction: 'older', id: oldest.id, date: messageDate(oldest) }
+            : null,
+          previous: window.direction !== 'older' && foundNewer && messages.length >= 49
+            ? { direction: 'newer', id: newest.id, date: messageDate(newest) }
+            : undefined,
+        }
+      }
+
+      const result = pinned
         ? await client!.searchMessages({
           chatId: target.peer,
           threadId,
+          filter: SearchFilters.Pinned,
           limit: 50,
           ...(pageParam ? { offset: pageParam as number } : {}),
         })
-        : await client!.getHistory(target.peer, {
-          limit: 50,
-          ...(pageParam ? { offset: pageParam as Exclude<HistoryPage['next'], number | null> } : {}),
-        })
-      return { messages: [...result].reverse(), next: (result.next ?? null) as HistoryPage['next'] }
+        : threadId != null
+          ? await client!.searchMessages({
+            chatId: target.peer,
+            threadId,
+            limit: 50,
+            ...(pageParam ? { offset: pageParam as number } : {}),
+          })
+          : await client!.getHistory(target.peer, {
+            limit: 50,
+            ...(pageParam ? { offset: pageParam as Exclude<HistoryPage['next'], number | null> } : {}),
+          })
+      return {
+        messages: [...result].reverse(),
+        next: (result.next ?? null) as HistoryPage['next'],
+        ...('total' in result ? { total: result.total } : {}),
+      }
     },
-    initialPageParam: null as HistoryPage['next'],
+    initialPageParam: targetMessageId != null
+      ? { direction: 'center', id: targetMessageId } as MessageWindowPageParam
+      : null as HistoryPage['next'],
     getNextPageParam: (page) => page.next ?? undefined,
+    getPreviousPageParam: (page) => page.previous,
     enabled: status === 'authenticated' && Boolean(client && dialog.data),
     staleTime: Infinity,
   })
@@ -98,8 +176,37 @@ export function useMessages(peerId: string, threadId?: number) {
     .reverse()
     .flatMap((page) => page.messages)
     .filter((message, index, all) => all.findIndex((item) => item.id === message.id) === index), [query.data])
+  const total = query.data?.pages[0]?.total ?? messages.length
 
-  return { ...query, messages, dialog: dialog.data, dialogError: dialog.error }
+  return { ...query, messages, total, dialog: dialog.data, dialogError: dialog.error }
+}
+
+export function useMessages(peerId: string, threadId?: number, pinned = false, targetMessageId?: number) {
+  return useMessageHistory(peerId, threadId, pinned, targetMessageId)
+}
+
+export function usePinnedMessages(peerId: string, threadId?: number) {
+  return useMessageHistory(peerId, threadId, true)
+}
+
+export function useCanPinMessages(peerId: string) {
+  const { client, status } = useTelegram()
+  const dialog = useDialog(peerId)
+  return useQuery({
+    queryKey: ['telegram', 'can-pin-messages', peerId],
+    queryFn: async () => {
+      const peer = dialog.data!.peer
+      if (peer.type === 'user') {
+        const full = await client!.getFullUser(peer)
+        return full.full._ === 'userFull' && full.full.canPinMessage === true
+      }
+      return peer.isCreator
+        || peer.adminRights?.pinMessages === true
+        || peer.permissions?.canPinMessages === true
+    },
+    enabled: status === 'authenticated' && Boolean(client && dialog.data),
+    staleTime: 5 * 60_000,
+  })
 }
 
 function stickersFromRaw(documents: tl.TypeDocument[]) {
@@ -229,6 +336,33 @@ export function useSendSticker(peerId: string) {
         recent: [sticker, ...current.recent.filter((item) => item.uniqueFileId !== sticker.uniqueFileId)],
       } : current)
       void queryClient.invalidateQueries({ queryKey: telegramKeys.dialogs() })
+    },
+  })
+}
+
+export function useSetMessagePinned(peerId: string, threadId?: number) {
+  const { client } = useTelegram()
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ message, pinned }: { message: import('@mtcute/web').Message; pinned: boolean }) => {
+      const dialog = await resolveDialog(client!, queryClient, peerId)
+      if (pinned) {
+        return client!.pinMessage({
+          message,
+          notify: false,
+          bothSides: dialog.peer.type === 'user',
+          shouldDispatch: true,
+        })
+      }
+      await client!.unpinMessage({ message })
+      return null
+    },
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: telegramKeys.pinnedMessages(peerId, threadId) }),
+        queryClient.invalidateQueries({ queryKey: telegramKeys.messages(peerId, threadId) }),
+        queryClient.invalidateQueries({ queryKey: telegramKeys.messageWindows(peerId) }),
+      ])
     },
   })
 }

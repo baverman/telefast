@@ -5,7 +5,7 @@ import { useDialogs } from '../telegram/queries'
 import { setActiveChatPeerId } from '../telegram/active-chat'
 import { RequireAuth } from '../routing/require-auth'
 import { ChatSidebar } from './chat-sidebar'
-import { Conversation, EmptyConversation } from './conversation'
+import { Conversation, EmptyConversation, PinnedConversation } from './conversation'
 import { PeerInfo } from './peer-info'
 
 export function ChatLayout() {
@@ -35,6 +35,7 @@ export function ChatLayout() {
           <Router>
             <Route path="/" component={EmptyConversation} />
             <Route path="/:peerId" component={Conversation} />
+            <Route path="/:peerId/pinned" component={PinnedConversation} />
             <Route path="/:peerId/info" component={PeerInfo} />
             <Route default component={EmptyConversation} message="Page not found" />
           </Router>
