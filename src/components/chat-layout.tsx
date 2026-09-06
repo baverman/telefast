@@ -27,7 +27,7 @@ export function ChatLayout() {
   }, [selectedPeerId, hasUnread])
 
   return (
-    <main class="flex h-screen overflow-hidden bg-zinc-950 text-zinc-100">
+    <main class="flex h-screen overflow-hidden bg-base-200 text-base-content">
       <ChatSidebar selectedPeerId={selectedPeerId} />
       <div class="flex min-h-0 min-w-0 flex-1 overflow-hidden">
         <Router>
@@ -41,7 +41,7 @@ export function ChatLayout() {
       </div>
       {error && (
         <button
-          class="fixed bottom-20 left-1/2 z-20 -translate-x-1/2 rounded-xl border border-red-900/60 bg-red-950 px-4 py-3 text-sm text-red-200 shadow-xl"
+          class="fixed bottom-20 left-1/2 z-20 -translate-x-1/2 rounded-xl border border-error/30 bg-error/10 px-4 py-3 text-sm text-error shadow-xl"
           onClick={clearError}
         >{error}</button>
       )}

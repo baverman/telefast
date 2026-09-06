@@ -30,12 +30,12 @@ export function LoginPage() {
   }
 
   return (
-    <main class="grid min-h-screen place-items-center bg-zinc-950 p-5 text-zinc-100">
-      <section class="w-full max-w-md rounded-3xl border border-zinc-800 bg-zinc-900 p-7 shadow-2xl shadow-black/40">
+    <main class="grid min-h-screen place-items-center bg-base-200 p-5 text-base-content">
+      <section class="w-full max-w-md rounded-3xl border border-base-300 bg-base-100 p-7 shadow-2xl shadow-black/40">
         <div class="mb-8">
-          <div class="mb-4 grid size-12 place-items-center rounded-2xl bg-sky-500 text-xl font-bold text-white">T</div>
+          <div class="mb-4 grid size-12 place-items-center rounded-2xl bg-primary text-xl font-bold text-primary-content">T</div>
           <h1 class="text-2xl font-semibold tracking-tight">Telefast</h1>
-          <p class="mt-2 text-sm leading-6 text-zinc-400">A direct, lightweight Telegram client. Data stays in this browser.</p>
+          <p class="mt-2 text-sm leading-6 text-muted">A direct, lightweight Telegram client. Data stays in this browser.</p>
         </div>
 
         {authStep === 'credentials' && (
@@ -53,7 +53,7 @@ export function LoginPage() {
               <input type="tel" autocomplete="tel" value={phone} onInput={(event) => setPhone(event.currentTarget.value)} placeholder="+1 555 000 0000" />
             </label>
             <button class="primary-button" disabled={busy} type="submit">{busy ? 'Connecting…' : 'Continue'}</button>
-            <p class="text-center text-xs leading-5 text-zinc-500">Create application credentials at my.telegram.org.</p>
+            <p class="text-center text-xs leading-5 text-muted">Create application credentials at my.telegram.org.</p>
           </form>
         )}
 
@@ -61,7 +61,7 @@ export function LoginPage() {
           <form class="space-y-4" onSubmit={(event) => { event.preventDefault(); if (code.trim()) submitCode(code.trim()) }}>
             <div>
               <h2 class="font-medium">Enter the login code</h2>
-              <p class="mt-1 text-sm text-zinc-400">Sent {deliveryLabel}.</p>
+              <p class="mt-1 text-sm text-muted">Sent {deliveryLabel}.</p>
             </div>
             <label class="field">
               <span>Code</span>
@@ -75,7 +75,7 @@ export function LoginPage() {
           <form class="space-y-4" onSubmit={(event) => { event.preventDefault(); if (password) submitPassword(password) }}>
             <div>
               <h2 class="font-medium">Two-step verification</h2>
-              <p class="mt-1 text-sm text-zinc-400">{passwordHint ? `Hint: ${passwordHint}` : 'Enter your Telegram password.'}</p>
+              <p class="mt-1 text-sm text-muted">{passwordHint ? `Hint: ${passwordHint}` : 'Enter your Telegram password.'}</p>
             </div>
             <label class="field">
               <span>Password</span>
@@ -85,7 +85,7 @@ export function LoginPage() {
           </form>
         )}
 
-        {(validationError || error) && <p role="alert" class="mt-4 rounded-xl border border-red-900/50 bg-red-950/40 px-4 py-3 text-sm text-red-300">{validationError || error}</p>}
+        {(validationError || error) && <p role="alert" class="mt-4 rounded-xl border border-error/30 bg-error/10 px-4 py-3 text-sm text-error">{validationError || error}</p>}
       </section>
     </main>
   )
@@ -93,16 +93,16 @@ export function LoginPage() {
 
 export function ConnectionScreen({ error, onRetry }: { error?: string; onRetry?: () => void }) {
   return (
-    <main class="grid min-h-screen place-items-center bg-zinc-950 px-5 text-zinc-100">
+    <main class="grid min-h-screen place-items-center bg-base-200 px-5 text-base-content">
       <div class="flex max-w-md flex-col items-center gap-4 text-center">
         {onRetry ? (
           <>
             <p class="text-sm font-medium">Unable to connect to Telegram</p>
-            {error && <p role="alert" class="text-xs text-zinc-400">{error}</p>}
+            {error && <p role="alert" class="text-xs text-muted">{error}</p>}
             <button type="button" class="primary-button px-6" onClick={onRetry}>Retry</button>
           </>
         ) : (
-          <div class="flex items-center gap-3 text-sm text-zinc-400">
+          <div class="flex items-center gap-3 text-sm text-muted">
             <span class="loader" /> Connecting to Telegram
           </div>
         )}

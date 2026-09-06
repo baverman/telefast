@@ -126,15 +126,15 @@ export function MessageComposer({
   }
 
   return (
-    <form class="relative shrink-0 border-t border-zinc-800 bg-zinc-900 p-3 md:px-6" onSubmit={submit}>
+    <form class="relative shrink-0 border-t border-base-300 bg-base-100 p-3 md:px-6" onSubmit={submit}>
       {pickerOpen && <StickerPicker peerId={peerId} onSent={() => setPickerOpen(false)} />}
       {(edit || reply) && (
-        <div class="mx-auto mb-2 flex max-w-3xl items-center gap-3 rounded-xl border-l-2 border-sky-400 bg-zinc-800 px-3 py-2">
+        <div class="mx-auto mb-2 flex max-w-3xl items-center gap-3 rounded-xl border-l-2 border-primary bg-base-300 px-3 py-2">
           <div class="min-w-0 flex-1">
-            <p class="truncate text-xs font-medium text-sky-300">
+            <p class="truncate text-xs font-medium text-primary">
               {edit ? 'Edit message' : reply?.quote ? 'Reply to selection' : `Reply to ${reply?.message.sender.displayName}`}
             </p>
-            <p class="truncate text-xs text-zinc-400">
+            <p class="truncate text-xs text-muted">
               {edit?.text || reply?.quote?.text || reply?.message.text || 'Attachment'}
             </p>
           </div>
@@ -148,17 +148,17 @@ export function MessageComposer({
       )}
       {showMenu && matches.length > 0 && (
         <div class="absolute bottom-full left-1/2 z-20 mb-2 w-full max-w-3xl -translate-x-1/2 px-3 md:px-6">
-          <div class="flex max-h-64 flex-col overflow-y-auto rounded-2xl border border-zinc-700 bg-zinc-900 py-1 shadow-2xl shadow-black/50">
+          <div class="flex max-h-64 flex-col overflow-y-auto rounded-2xl border border-base-300 bg-base-100 py-1 shadow-2xl shadow-black/50">
             {matches.map((command, index) => (
               <button
                 key={command.name}
                 type="button"
-                class={`flex items-baseline gap-3 px-4 py-2 text-left ${index === active ? 'bg-zinc-800' : ''}`}
+                class={`flex items-baseline gap-3 px-4 py-2 text-left ${index === active ? 'bg-base-300' : ''}`}
                 onMouseEnter={() => setActiveIndex(index)}
                 onClick={() => applyCommand(command)}
               >
-                <span class="shrink-0 font-mono text-sm text-sky-300">{command.name}</span>
-                {command.description && <span class="min-w-0 flex-1 truncate text-right text-xs text-zinc-500">{command.description}</span>}
+                <span class="shrink-0 font-mono text-sm text-primary">{command.name}</span>
+                {command.description && <span class="min-w-0 flex-1 truncate text-right text-xs text-muted">{command.description}</span>}
               </button>
             ))}
           </div>
@@ -166,7 +166,7 @@ export function MessageComposer({
       )}
       <div class="mx-auto flex max-w-3xl items-center gap-2">
         <button
-          class={`grid size-11 shrink-0 place-items-center rounded-full border text-lg transition ${pickerOpen ? 'border-sky-500 bg-sky-500/15' : 'border-[var(--app-field-border)] bg-[var(--app-field-bg)] hover:bg-[var(--app-hover-bg)]'}`}
+          class={`grid size-11 shrink-0 place-items-center rounded-full border text-lg transition ${pickerOpen ? 'border-primary bg-primary/15' : 'border-base-300 bg-base-100'}`}
           type="button"
           onClick={() => setPickerOpen((open) => !open)}
           aria-label="Open sticker picker"
@@ -174,7 +174,7 @@ export function MessageComposer({
         >◇</button>
         <textarea
           ref={inputRef}
-          class="max-h-36 min-h-11 flex-1 resize-none rounded-2xl border border-zinc-700 bg-[var(--app-field-bg)] px-4 py-3 text-sm outline-none focus:border-sky-500"
+          class="max-h-36 min-h-11 flex-1 resize-none rounded-2xl border border-base-300 bg-base-100 text-base-content px-4 py-3 text-sm outline-none focus:border-primary"
           rows={1}
           value={draft}
           onInput={(event) => setDraft(event.currentTarget.value)}
@@ -222,7 +222,7 @@ export function MessageComposer({
           placeholder="Message"
         />
         <button
-          class="grid size-11 shrink-0 place-items-center rounded-full bg-sky-500 font-bold text-white transition hover:bg-sky-400 disabled:opacity-40"
+          class="grid size-11 shrink-0 place-items-center rounded-full bg-primary font-bold text-primary-content transition disabled:opacity-40"
           disabled={!draft.trim() || sendText.isPending || editMessage.isPending}
           type="submit"
           aria-label={edit ? 'Save edit' : 'Send message'}

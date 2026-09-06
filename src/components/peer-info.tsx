@@ -20,9 +20,9 @@ function userStatus(status: string) {
 
 function InfoRow({ label, value }: { label: string; value: string | number }) {
   return (
-    <div class="flex items-start justify-between gap-6 border-b border-zinc-800 py-3 last:border-0">
-      <span class="text-sm text-zinc-500">{label}</span>
-      <span class="break-all text-right text-sm text-zinc-300">{value}</span>
+    <div class="flex items-start justify-between gap-6 border-b border-base-300 py-3 last:border-0">
+      <span class="text-sm text-muted">{label}</span>
+      <span class="break-all text-right text-sm text-base-content">{value}</span>
     </div>
   )
 }
@@ -45,7 +45,7 @@ export function PeerInfo({ peerId }: { peerId: string }) {
 
   if (!peer) {
     return (
-      <section class="flex min-w-0 flex-1 items-center justify-center bg-chat text-sm text-zinc-500">
+      <section class="flex min-w-0 flex-1 items-center justify-center bg-chat text-sm text-muted">
         {selected.isError ? 'Chat not found' : 'Loading chat…'}
       </section>
     )
@@ -65,7 +65,7 @@ export function PeerInfo({ peerId }: { peerId: string }) {
 
   return (
     <section class="flex min-w-0 flex-1 flex-col bg-chat">
-      <header class="flex h-16 shrink-0 items-center gap-3 border-b border-zinc-800 bg-zinc-900/90 px-4 backdrop-blur">
+      <header class="flex h-16 shrink-0 items-center gap-3 border-b border-base-300 bg-base-100 px-4 backdrop-blur">
         <a href={backHref} class="icon-button" aria-label="Back to chat">←</a>
         <strong class="text-sm font-medium">{heading}</strong>
       </header>
@@ -83,18 +83,18 @@ export function PeerInfo({ peerId }: { peerId: string }) {
                 href={`https://t.me/${username}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                class="mt-1 text-sm text-sky-300 hover:underline"
+                class="mt-1 text-sm text-primary hover:underline"
               >
                 @{username}
               </a>
             )}
-            {bio && <p class="mt-4 max-w-md whitespace-pre-wrap text-sm leading-6 text-zinc-300">{bio}</p>}
+            {bio && <p class="mt-4 max-w-md whitespace-pre-wrap text-sm leading-6 text-base-content">{bio}</p>}
           </div>
 
-          {details.isPending && <p class="text-center text-sm text-zinc-500">Loading information…</p>}
-          {details.isError && <p class="text-center text-sm text-red-300">Failed to load full information.</p>}
+          {details.isPending && <p class="text-center text-sm text-muted">Loading information…</p>}
+          {details.isError && <p class="text-center text-sm text-error">Failed to load full information.</p>}
 
-          <div class="rounded-2xl border border-zinc-800 bg-zinc-900/80 px-4">
+          <div class="rounded-2xl border border-base-300 bg-base-100 px-4">
             <InfoRow label="Type" value={kind} />
             <InfoRow label="Telegram ID" value={peer.id} />
             {full?.type === 'user' && <InfoRow label="Status" value={userStatus(full.status)} />}

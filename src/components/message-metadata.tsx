@@ -46,7 +46,7 @@ export function MessageMetadata({
       {forward && (forwardHref ? (
         <a
           href={forwardHref}
-          class="truncate text-xs font-medium text-sky-300 underline-offset-2 hover:underline"
+          class="truncate text-xs font-medium text-primary underline-offset-2 hover:underline"
           title="Go to original message"
         >
           <span aria-hidden="true">↪ </span>
@@ -54,16 +54,16 @@ export function MessageMetadata({
           {forward.signature ? ` (${forward.signature})` : ''}
         </a>
       ) : (
-        <p class="truncate text-xs font-medium text-sky-300">
+        <p class="truncate text-xs font-medium text-primary">
           <span aria-hidden="true">↪ </span>
           Forwarded from {forward.sender.displayName}
           {forward.signature ? ` (${forward.signature})` : ''}
         </p>
       ))}
       {reply && (
-        <div class="min-w-0 rounded-r-md border-l-2 border-sky-400 bg-zinc-950/20 px-2 py-1">
-          <p class="truncate text-xs font-medium text-sky-300">{replySender}</p>
-          <p class="truncate text-xs text-zinc-400">{replyText}</p>
+        <div class="min-w-0 rounded-r-md border-l-2 border-primary bg-base-300 px-2 py-1">
+          <p class="truncate text-xs font-medium text-primary">{replySender}</p>
+          <p class="truncate text-xs text-muted">{replyText}</p>
         </div>
       )}
     </div>

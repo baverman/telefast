@@ -266,16 +266,16 @@ export function MessageList({
         {history.hasNextPage && (
           <div ref={olderSentinelRef} class="flex min-h-px justify-center">
             {history.isFetchingNextPage && (
-              <span class="mb-4 rounded-full border border-zinc-700 bg-zinc-900 px-4 py-2 text-xs text-zinc-300">
+              <span class="mb-4 rounded-full border border-base-300 bg-base-100 px-4 py-2 text-xs text-base-content">
                 Loading older messages…
               </span>
             )}
           </div>
         )}
-        {history.isPending && <p class="my-auto text-center text-sm text-zinc-500">Loading messages…</p>}
-        {history.isError && <p class="my-auto text-center text-sm text-red-300">Failed to load messages.</p>}
+        {history.isPending && <p class="my-auto text-center text-sm text-muted">Loading messages…</p>}
+        {history.isError && <p class="my-auto text-center text-sm text-error">Failed to load messages.</p>}
         {!history.isPending && !history.isError && history.messages.length === 0 && (
-          <p class="my-auto text-center text-sm text-zinc-500">
+          <p class="my-auto text-center text-sm text-muted">
             {pinned ? 'No pinned messages' : searchQuery != null ? 'No search results' : 'No messages'}
           </p>
         )}
@@ -300,14 +300,14 @@ export function MessageList({
                 <Avatar
                   peer={message.sender}
                   telegram={client}
-                  className="grid size-8 place-items-center rounded-full bg-gradient-to-br from-sky-500 to-indigo-500 text-[10px] font-semibold text-white"
+                  className="grid size-8 place-items-center rounded-full bg-gradient-to-br from-sky-500 to-indigo-500 text-[10px] font-semibold text-primary-content"
                 />
               </a>
             )}
             {!message.isService && (
               <button
                 type="button"
-                class={`absolute right-1 top-1 z-10 grid size-6 place-items-center rounded-full border border-zinc-700 bg-zinc-900 text-zinc-400 shadow-md transition hover:bg-zinc-800 hover:text-zinc-100 focus:opacity-100 ${
+                class={`absolute right-1 top-1 z-10 grid size-6 place-items-center rounded-full border border-base-300 bg-base-100 text-muted shadow-md transition focus:opacity-100 ${
                   reactionMenu?.message.id === message.id
                     ? 'opacity-100'
                     : 'pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100'
@@ -340,7 +340,7 @@ export function MessageList({
             {isGroupPeer(dialog.peer) && !message.isOutgoing && (
               <a
                 href={`/chat/${encodeURIComponent(String(message.sender.id))}/info`}
-                class="mb-1 block w-fit text-xs font-medium text-sky-300 underline-offset-2 hover:underline"
+                class="mb-1 block w-fit text-xs font-medium text-primary underline-offset-2 hover:underline"
                 title={`Open information about ${message.sender.displayName}`}
               >
                 {message.sender.displayName}
@@ -356,7 +356,7 @@ export function MessageList({
               {message.replies?.hasComments && message.replies.discussion != null && (
                 <button
                   type="button"
-                  class="inline-flex items-center gap-1 rounded-full bg-zinc-900 px-2 py-0.5 text-[11px] text-zinc-400 hover:text-sky-300"
+                  class="inline-flex items-center gap-1 rounded-full bg-base-100 px-2 py-0.5 text-[11px] text-muted"
                   onClick={() => void openComments(message)}
                 >
                   💬 {message.replies.count > 0 ? message.replies.count : 'Comments'}
@@ -364,7 +364,7 @@ export function MessageList({
               )}
               {!message.isService && <ReactionBar message={message} peerId={peerId} threadId={threadId} />}
               <time
-                class="ml-auto text-[10px] text-zinc-400/80"
+                class="ml-auto text-[10px] text-muted"
                 dateTime={message.date.toISOString()}
                 title={message.date.toLocaleString(undefined, { dateStyle: 'full', timeStyle: 'long' })}
               >
@@ -376,7 +376,7 @@ export function MessageList({
         {targetMessageId != null && history.hasPreviousPage && (
           <div ref={newerSentinelRef} class="flex min-h-px justify-center">
             {history.isFetchingPreviousPage && (
-              <span class="mt-4 rounded-full border border-zinc-700 bg-zinc-900 px-4 py-2 text-xs text-zinc-300">
+              <span class="mt-4 rounded-full border border-base-300 bg-base-100 px-4 py-2 text-xs text-base-content">
                 Loading newer messages…
               </span>
             )}
@@ -410,7 +410,7 @@ export function MessageList({
       {showScrollToLatest && (
         <button
           type="button"
-          class="absolute bottom-4 right-4 z-20 grid size-11 place-items-center rounded-full border border-zinc-700 bg-zinc-900/95 text-xl text-zinc-100 shadow-lg shadow-black/40 backdrop-blur transition hover:bg-zinc-800 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-500"
+          class="absolute bottom-4 right-4 z-20 grid size-11 place-items-center rounded-full border border-base-300 bg-base-100 text-xl text-base-content shadow-lg shadow-black/40 backdrop-blur transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
           aria-label={targetMessageId != null ? 'Go to latest messages' : 'Scroll to latest messages'}
           title={targetMessageId != null ? 'Go to latest messages' : 'Scroll to latest messages'}
           onClick={() => {

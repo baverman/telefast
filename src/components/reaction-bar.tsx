@@ -24,8 +24,8 @@ export function ReactionBar({ message, peerId, threadId }: { message: Message; p
             type="button"
             class={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs ${
               active
-                ? 'border-sky-500 bg-sky-500/15 text-sky-300'
-                : 'border-zinc-700 bg-zinc-900 text-zinc-300 hover:bg-zinc-800'
+                ? 'border-primary bg-primary/15 text-primary'
+                : 'border-base-300 bg-base-100 text-base-content'
             }`}
             onClick={() => react.mutate({ messageId: message.id, emoji, remove: active })}
             title={active ? 'Remove reaction' : `React with ${emoji}`}
@@ -94,7 +94,7 @@ export function MessageContextMenu({
            <button
              type="button"
              role="menuitem"
-             class={`w-full rounded-lg px-3 py-2 text-left text-sm transition disabled:cursor-not-allowed disabled:opacity-40 ${danger ? 'text-red-300 hover:bg-red-900/30' : 'text-zinc-300 hover:bg-zinc-800'}`}
+             class={`w-full rounded-lg px-3 py-2 text-left text-sm transition disabled:opacity-40 ${danger ? 'text-error' : 'text-base-content'}`}
              disabled={disabled}
              onClick={handler}
            >
@@ -107,18 +107,18 @@ export function MessageContextMenu({
              <div class="fixed inset-0 z-40 bg-black/10" onMouseDown={onClose} />
              {view === 'menu' ? (
                <div
-                 class={`fixed z-50 w-60 -translate-x-1/2 rounded-xl border border-zinc-700 bg-zinc-900 p-1.5 shadow-2xl shadow-black/50 ${placement === 'above' ? '-translate-y-full' : ''}`}
+                 class={`fixed z-50 w-60 -translate-x-1/2 rounded-xl border border-base-300 bg-base-100 p-1.5 shadow-2xl shadow-black/50 ${placement === 'above' ? '-translate-y-full' : ''}`}
                  style={{ left: `${x}px`, top: `${y}px` }}
                  role="menu"
                >
-                 <div class="mb-1 flex justify-between gap-1 border-b border-zinc-700 pb-1.5">
+                 <div class="mb-1 flex justify-between gap-1 border-b border-base-300 pb-1.5">
                    {QUICK_REACTIONS.map((emoji) => {
                      const active = isActive(emoji)
                      return (
                        <button
                          key={emoji}
                          type="button"
-                         class={`grid size-8 place-items-center rounded-full text-base transition ${active ? 'bg-sky-500/25' : 'hover:bg-zinc-800'}`}
+                         class={`grid size-8 place-items-center rounded-full text-base transition ${active ? 'bg-primary/15' : ''}`}
                          role="menuitem"
                          title={active ? `Remove ${emoji}` : `React with ${emoji}`}
                          onClick={() => {
@@ -149,7 +149,7 @@ export function MessageContextMenu({
                  onClose={onClose}
                />
              ) : (
-               <div class="fixed left-1/2 top-1/2 z-50 w-[min(26rem,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-zinc-700 bg-zinc-900 p-4 shadow-2xl shadow-black/60">
+               <div class="fixed left-1/2 top-1/2 z-50 w-[min(26rem,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-base-300 bg-base-100 p-4 shadow-2xl shadow-black/60">
                  {view === 'forward' ? (
                    <>
                      <div class="mb-3 flex items-center justify-between gap-3">
@@ -161,7 +161,7 @@ export function MessageContextMenu({
                          <button
                            key={String(dialog.peer.id)}
                            type="button"
-                           class="block w-full truncate rounded-lg px-3 py-2 text-left text-sm hover:bg-zinc-800 disabled:opacity-40"
+                           class="block w-full truncate rounded-lg px-3 py-2 text-left text-sm disabled:opacity-40"
                            disabled={forward.isPending}
                            onClick={() => {
                              void forward.mutateAsync({ message, toPeerId: String(dialog.peer.id) })
@@ -177,25 +177,25 @@ export function MessageContextMenu({
                  ) : (
                    <>
                      <h2 class="mb-2 font-medium">Delete message</h2>
-                     <p class="mb-4 text-sm text-zinc-400">Choose where this message is deleted.</p>
+                     <p class="mb-4 text-sm text-muted">Choose where this message is deleted.</p>
                      <div class="flex flex-col gap-2">
                        <button
                          type="button"
-                         class="rounded-lg bg-zinc-800 px-4 py-2 text-sm hover:bg-zinc-700 disabled:opacity-40"
+                         class="rounded-lg bg-base-300 px-4 py-2 text-sm disabled:opacity-40"
                          disabled={remove.isPending}
                          onClick={() => void remove.mutateAsync({ message, revoke: false }).then(onClose).catch(() => undefined)}
                        >Delete only for me</button>
                        <button
                          type="button"
-                         class="rounded-lg bg-red-900/50 px-4 py-2 text-sm text-red-200 hover:bg-red-900/70 disabled:opacity-40"
+                         class="rounded-lg bg-error px-4 py-2 text-sm text-error-content disabled:opacity-40"
                          disabled={remove.isPending}
                          onClick={() => void remove.mutateAsync({ message, revoke: true }).then(onClose).catch(() => undefined)}
                        >Delete for both parties</button>
-                       <button type="button" class="rounded-lg px-4 py-2 text-sm text-zinc-400 hover:bg-zinc-800" onClick={onClose}>Cancel</button>
+                       <button type="button" class="rounded-lg px-4 py-2 text-sm text-muted" onClick={onClose}>Cancel</button>
                      </div>
                    </>
                  )}
-                 {error && <p role="alert" class="mt-3 text-xs text-red-300">{error.message}</p>}
+                 {error && <p role="alert" class="mt-3 text-xs text-error">{error.message}</p>}
                </div>
              )}
            </>

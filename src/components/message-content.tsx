@@ -39,7 +39,7 @@ function MediaDownloadLink({ url, fileName }: { url: string; fileName: string })
     <a
       href={url}
       download={fileName}
-      class="inline-flex rounded-full bg-zinc-900 px-3 py-1.5 text-xs text-zinc-300 hover:bg-zinc-800"
+      class="inline-flex rounded-full bg-base-100 px-3 py-1.5 text-xs text-base-content"
     >
       ↓ Download
     </a>
@@ -90,7 +90,7 @@ function PhotoView({ message, telegram }: { message: Message; telegram: Telefast
   return (
     <div
       ref={hostRef}
-      class="max-w-full overflow-hidden rounded-lg bg-zinc-900"
+      class="max-w-full overflow-hidden rounded-lg bg-base-100"
       style={{ width: `min(${photo.width}px, 20rem)`, aspectRatio: `${photo.width} / ${photo.height}` }}
     >
       <a href={url} target="_blank" rel="noopener noreferrer" class="block size-full">
@@ -140,7 +140,7 @@ function VideoView({ message, telegram }: { message: Message; telegram: Telefast
       >
         <video
           ref={videoRef}
-          class="block w-full rounded-lg bg-zinc-900 object-contain"
+          class="block w-full rounded-lg bg-base-100 object-contain"
           style={{ aspectRatio: `${video.width} / ${video.height}` }}
           src={visible ? url : undefined}
           poster={poster.data}
@@ -213,7 +213,7 @@ function DocumentView({ message, telegram }: { message: Message; telegram: Telef
         style={{ width: `min(${width}px, 20rem)` }}
       >
         <video
-          class="block w-full rounded-lg bg-zinc-900 object-contain"
+          class="block w-full rounded-lg bg-base-100 object-contain"
           style={{ aspectRatio: `${width} / ${height}` }}
           src={visible ? streamUrl : undefined}
           poster={poster.data}
@@ -234,7 +234,7 @@ function DocumentView({ message, telegram }: { message: Message; telegram: Telef
       : { width: '20rem', aspectRatio: '1 / 1' }
 
     return (
-      <div ref={hostRef} class="max-w-full overflow-hidden rounded-lg bg-zinc-900" style={style}>
+      <div ref={hostRef} class="max-w-full overflow-hidden rounded-lg bg-base-100" style={style}>
         <a href={url} target="_blank" rel="noopener noreferrer" class="block size-full">
           {visible && <img class="size-full object-contain" src={url} alt={document.fileName || 'Image'} decoding="async" />}
         </a>
@@ -246,12 +246,12 @@ function DocumentView({ message, telegram }: { message: Message; telegram: Telef
     <a
       href={streamUrl}
       download={document.fileName ?? undefined}
-      class="flex max-w-full items-center gap-3 rounded-lg border border-zinc-700 bg-zinc-950/40 p-3 hover:bg-zinc-800/60"
+      class="flex max-w-full items-center gap-3 rounded-lg border border-base-300 bg-base-200/40 p-3"
     >
-      <span class="grid size-10 shrink-0 place-items-center rounded-lg bg-zinc-800 text-lg">📄</span>
+      <span class="grid size-10 shrink-0 place-items-center rounded-lg bg-base-300 text-lg">📄</span>
       <span class="min-w-0">
         <strong class="block truncate text-sm">{document.fileName || 'Document'}</strong>
-        <span class="text-xs text-zinc-500">{formatBytes(document.fileSize) || document.mimeType}</span>
+        <span class="text-xs text-muted">{formatBytes(document.fileSize) || document.mimeType}</span>
       </span>
     </a>
   )
@@ -287,10 +287,10 @@ function ContactView({ message }: { message: Message }) {
   const name = [contact.firstName, contact.lastName].filter(Boolean).join(' ')
   return (
     <a href={`tel:${contact.phoneNumber}`} class="flex max-w-full items-center gap-3">
-      <span class="grid size-10 shrink-0 place-items-center rounded-full bg-sky-500/20 text-lg">👤</span>
+      <span class="grid size-10 shrink-0 place-items-center rounded-full bg-primary/15 text-lg">👤</span>
       <span class="min-w-0">
         <strong class="block truncate text-sm">{name || 'Contact'}</strong>
-        <span class="text-xs text-zinc-500">{contact.phoneNumber}</span>
+        <span class="text-xs text-muted">{contact.phoneNumber}</span>
       </span>
     </a>
   )
@@ -310,7 +310,7 @@ function MediaBlock({ message, telegram }: { message: Message; telegram: Telefas
 
 export function MessageContent({ message, telegram }: { message: Message; telegram: TelefastClient | null }) {
   if (message.isService) {
-    return <span class="text-sm text-zinc-400">{serviceMessageText(message.action, message.sender.displayName)}</span>
+    return <span class="text-sm text-muted">{serviceMessageText(message.action, message.sender.displayName)}</span>
   }
 
   return (

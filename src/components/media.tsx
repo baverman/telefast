@@ -73,7 +73,7 @@ export function MessageText({ message }: { message: Message }) {
       parts.push(
         <span
           key={`command-${entity.offset}-${entity.length}`}
-          class="rounded bg-sky-500/10 px-1 font-mono text-sky-300"
+          class="rounded bg-primary/15 px-1 font-mono text-primary"
         >
           {text}
         </span>,
@@ -89,7 +89,7 @@ export function MessageText({ message }: { message: Message }) {
     parts.push(
       <a
         key={`${entity.offset}-${entity.length}`}
-        class="text-sky-300 underline decoration-sky-400/60 underline-offset-2 hover:text-sky-200"
+        class="text-primary underline decoration-primary/60 underline-offset-2"
         href={href}
         target={opensNewTab ? '_blank' : undefined}
         rel={opensNewTab ? 'noopener noreferrer' : undefined}
@@ -268,7 +268,7 @@ export function StickerView({
                  <span class="grid size-10 place-items-center rounded-full bg-black/55 pl-0.5 text-sm text-white shadow-lg">▶</span>
                </span>
              )}
-             {stickerQuery.isError && <span class="text-sm text-zinc-400">{label}</span>}
+             {stickerQuery.isError && <span class="text-sm text-muted">{label}</span>}
            </div>
          )
        }

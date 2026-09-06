@@ -31,7 +31,7 @@ function MessageSearchField({ peerId, initialQuery = '' }: { peerId: string; ini
         onInput={(event) => setQuery(event.currentTarget.value)}
         placeholder="Search messages"
         aria-label="Search messages"
-        class="header-search h-9 w-32 rounded-lg border px-3 text-sm leading-none text-zinc-100 outline-none sm:w-48 lg:w-64"
+        class="header-search h-9 w-32 rounded-lg border px-3 text-sm leading-none text-base-content outline-none sm:w-48 lg:w-64"
       />
     </form>
   )
@@ -59,11 +59,11 @@ export function Conversation({ peerId }: { peerId: string }) {
   if (!dialog) return <EmptyConversation message={selected.isError ? 'Chat not found' : 'Loading chat…'} />
   return (
     <section class="flex min-w-0 flex-1 flex-col bg-chat">
-      <header class="flex h-16 shrink-0 items-center gap-3 border-b border-zinc-800 bg-zinc-900/90 px-4 backdrop-blur">
+      <header class="flex h-16 shrink-0 items-center gap-3 border-b border-base-300 bg-base-100 px-4 backdrop-blur">
         <a class="icon-button md:hidden" href="/chat" aria-label="Back to chats">←</a>
         <a
           href={infoHref}
-          class="flex min-w-0 items-center gap-3 rounded-lg hover:text-sky-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-500"
+          class="flex min-w-0 items-center gap-3 rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
           aria-label={`Open information about ${dialog.peer.displayName}`}
         >
           <Avatar
@@ -109,7 +109,7 @@ export function Conversation({ peerId }: { peerId: string }) {
           />
         )
         : (
-          <div class="shrink-0 border-t border-zinc-800 bg-zinc-900 p-4 text-center text-sm text-zinc-500">
+          <div class="shrink-0 border-t border-base-300 bg-base-100 p-4 text-center text-sm text-muted">
             You can't send messages here
           </div>
         )}
@@ -131,7 +131,7 @@ export function PinnedConversation({ peerId }: { peerId: string }) {
 
   return (
     <section class="flex min-w-0 flex-1 flex-col bg-chat">
-      <header class="flex h-16 shrink-0 items-center gap-3 border-b border-zinc-800 bg-zinc-900/90 px-4 backdrop-blur">
+      <header class="flex h-16 shrink-0 items-center gap-3 border-b border-base-300 bg-base-100 px-4 backdrop-blur">
         <a href={backHref} class="icon-button" aria-label="Back to chat">←</a>
         <strong class="text-sm font-medium">Pinned messages</strong>
         <MessageSearchField peerId={peerId} />
@@ -161,7 +161,7 @@ export function SearchConversation({ peerId }: { peerId: string }) {
 
   return (
     <section class="flex min-w-0 flex-1 flex-col bg-chat">
-      <header class="flex h-16 shrink-0 items-center gap-3 border-b border-zinc-800 bg-zinc-900/90 px-4 backdrop-blur">
+      <header class="flex h-16 shrink-0 items-center gap-3 border-b border-base-300 bg-base-100 px-4 backdrop-blur">
         <a href={backHref} class="icon-button" aria-label="Back to chat">←</a>
         <strong class="text-sm font-medium">Search</strong>
         <MessageSearchField peerId={peerId} initialQuery={query} />
@@ -176,7 +176,7 @@ export function SearchConversation({ peerId }: { peerId: string }) {
           onEdit={() => undefined}
         />
       ) : (
-        <div class="grid min-h-0 flex-1 place-items-center text-sm text-zinc-500">Enter a search query</div>
+        <div class="grid min-h-0 flex-1 place-items-center text-sm text-muted">Enter a search query</div>
       )}
     </section>
   )
@@ -185,8 +185,8 @@ export function SearchConversation({ peerId }: { peerId: string }) {
 export function EmptyConversation({ message = 'Select a chat' }: { message?: string }) {
   return (
     <section class="hidden min-w-0 flex-1 flex-col bg-chat md:flex">
-      <div class="m-auto text-center text-zinc-600">
-        <div class="mx-auto mb-3 grid size-14 place-items-center rounded-2xl border border-zinc-800 text-xl">T</div>
+      <div class="m-auto text-center text-muted">
+        <div class="mx-auto mb-3 grid size-14 place-items-center rounded-2xl border border-base-300 text-xl">T</div>
         <p class="text-sm">{message}</p>
       </div>
     </section>

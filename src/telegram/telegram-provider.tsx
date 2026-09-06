@@ -84,13 +84,14 @@ interface TelegramContextValue {
   client: TelefastClient | null
   blobCache: BlobCache | null
   notificationPermission: NotificationPermission | 'unsupported'
+  notificationsEnabled: boolean
   beginLogin(input: BeginLoginInput): Promise<void>
   submitCode(code: string): void
   submitPassword(password: string): void
   logout(): Promise<void>
   reconnect(): Promise<void>
   clearError(): void
-  enableNotifications(): Promise<void>
+  setNotificationsEnabled(enabled: boolean): Promise<void>
   markRead(peerId: string): Promise<void>
 }
 
@@ -154,6 +155,9 @@ export function TelegramProvider({ children, fallback }: { children: ComponentCh
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission | 'unsupported'>(
     typeof Notification === 'undefined' ? 'unsupported' : Notification.permission,
   )
+  const initialNotificationsEnabled = typeof Notification !== 'undefined' && Notification.permission === 'granted' && localStorage.getItem('telefast-notifications') !== 'off'
+  const [notificationsEnabled, setNotificationsEnabledState] = useState(initialNotificationsEnabled)
+  const notificationsEnabledRef = useRef(initialNotificationsEnabled)
   const connectionRef = useRef<Connection | null>(null)
   const resourcesRef = useRef<AccountResources | null>(null)
   const recoveringConnectionRef = useRef(false)
@@ -196,7 +200,7 @@ export function TelegramProvider({ children, fallback }: { children: ComponentCh
         hasFocus: document.hasFocus(),
       })
       if (
-        !message.isOutgoing && target && target.isMuted !== true &&
+        notificationsEnabledRef.current && !message.isOutgoing && target && target.isMuted !== true &&
         typeof Notification !== 'undefined' && Notification.permission === 'granted' &&
         (document.visibilityState !== 'visible' || !document.hasFocus() || !isCurrent)
       ) {
@@ -433,10 +437,23 @@ export function TelegramProvider({ children, fallback }: { children: ComponentCh
       console.error('[Telefast] Failed to mark chat as read', error)
     }
   }
-  async function enableNotifications() {
+  async function setNotificationsEnabled(enabled: boolean) {
     if (typeof Notification === 'undefined') return
+    if (!enabled) {
+      notificationsEnabledRef.current = false
+      setNotificationsEnabledState(false)
+      localStorage.setItem('telefast-notifications', 'off')
+      return
+    }
     try {
-      setNotificationPermission(await Notification.requestPermission())
+      const permission = Notification.permission === 'granted'
+        ? 'granted'
+        : await Notification.requestPermission()
+      setNotificationPermission(permission)
+      const nextEnabled = permission === 'granted'
+      notificationsEnabledRef.current = nextEnabled
+      setNotificationsEnabledState(nextEnabled)
+      if (nextEnabled) localStorage.removeItem('telefast-notifications')
     } catch (notificationError) {
       setError(reportError('Failed to request notification permission', notificationError))
     }
@@ -468,8 +485,8 @@ export function TelegramProvider({ children, fallback }: { children: ComponentCh
   const value: TelegramContextValue = {
     status, authStep, passwordHint, deliveryLabel, busy, error, client,
     blobCache: resources?.blobCache ?? null,
-    notificationPermission, beginLogin, submitCode, submitPassword, logout, reconnect,
-    clearError: () => setError(''), enableNotifications, markRead,
+    notificationPermission, notificationsEnabled, beginLogin, submitCode, submitPassword, logout, reconnect,
+    clearError: () => setError(''), setNotificationsEnabled, markRead,
   }
 
   const content = status === 'authenticated' && resources

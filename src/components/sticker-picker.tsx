@@ -41,8 +41,8 @@ export function StickerPackView({
   const { client } = useTelegram()
   const [animatedStickerId, setAnimatedStickerId] = useState<string | null>(null)
 
-  if (loading) return <p class="grid min-h-40 place-items-center text-sm text-zinc-500">Loading stickers…</p>
-  if (!stickers.length) return <p class="grid min-h-40 place-items-center text-sm text-zinc-500">{emptyMessage}</p>
+  if (loading) return <p class="grid min-h-40 place-items-center text-sm text-muted">Loading stickers…</p>
+  if (!stickers.length) return <p class="grid min-h-40 place-items-center text-sm text-muted">{emptyMessage}</p>
 
   return (
     <div
@@ -52,7 +52,7 @@ export function StickerPackView({
       {stickers.map((sticker) => (
         <button
           key={sticker.uniqueFileId}
-          class="relative grid w-full place-items-center overflow-hidden rounded-xl hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-40"
+          class="relative grid w-full place-items-center overflow-hidden rounded-xl disabled:opacity-40"
           style={{ aspectRatio: `${sticker.width} / ${sticker.height}` }}
           type="button"
           disabled={disabled}
@@ -135,10 +135,10 @@ export function StickerPicker({ peerId, onSent }: { peerId: string; onSent: () =
     : undefined
 
   return (
-    <section class="absolute bottom-full left-3 right-3 z-20 mx-auto mb-2 flex max-h-[70vh] max-w-3xl flex-col overflow-hidden rounded-2xl border border-zinc-700 bg-zinc-900 shadow-2xl shadow-black/50">
-      <div class="flex gap-2 border-b border-zinc-800 p-3">
+    <section class="absolute bottom-full left-3 right-3 z-20 mx-auto mb-2 flex max-h-[70vh] max-w-3xl flex-col overflow-hidden rounded-2xl border border-base-300 bg-base-100 shadow-2xl shadow-black/50">
+      <div class="flex gap-2 border-b border-base-300 p-3">
         <input
-          class="min-w-0 flex-1 rounded-xl border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm outline-none placeholder:text-zinc-600 focus:border-sky-500"
+          class="min-w-0 flex-1 rounded-xl border border-base-300 bg-base-100 px-3 py-2 text-sm outline-none themed-input focus:border-primary"
           value={search}
           minLength={3}
           onInput={(event) => setSearch(event.currentTarget.value)}
@@ -147,7 +147,7 @@ export function StickerPicker({ peerId, onSent }: { peerId: string; onSent: () =
         />
         {selectedPack && (
           <button
-            class="shrink-0 rounded-xl border border-red-900/60 bg-red-900/30 px-3 text-xs font-semibold text-red-200 transition hover:bg-red-900/50 disabled:cursor-not-allowed disabled:opacity-40"
+            class="shrink-0 rounded-xl border border-error/30 bg-error/10 px-3 text-xs font-semibold text-error transition disabled:opacity-40"
             type="button"
             disabled={setInstalled.isPending}
             onClick={() => setInstalled.mutate(
@@ -159,7 +159,7 @@ export function StickerPicker({ peerId, onSent }: { peerId: string; onSent: () =
           </button>
         )}
         <button
-          class={`shrink-0 rounded-xl border px-3 text-xs font-semibold transition ${large ? 'border-sky-500 bg-sky-500/20 text-sky-200' : 'border-zinc-700 bg-zinc-800 text-zinc-300 hover:bg-zinc-700'}`}
+          class={`shrink-0 rounded-xl border px-3 text-xs font-semibold transition ${large ? 'border-primary bg-primary/15 text-primary' : 'border-base-300 bg-base-300 text-base-content'}`}
           type="button"
           title="Show sticker previews two times larger"
           aria-label="Show sticker previews two times larger"
@@ -170,7 +170,7 @@ export function StickerPicker({ peerId, onSent }: { peerId: string; onSent: () =
         </button>
       </div>
       <div class="flex min-h-0 flex-1">
-        <nav class="flex w-44 shrink-0 flex-col gap-1 overflow-y-auto border-r border-zinc-800 p-2" aria-label="Sticker packs">
+        <nav class="flex w-44 shrink-0 flex-col gap-1 overflow-y-auto border-r border-base-300 p-2" aria-label="Sticker packs">
           {[
             { id: 'recent', label: 'Recent' },
             { id: 'favorites', label: 'Favorites' },
@@ -178,7 +178,7 @@ export function StickerPicker({ peerId, onSent }: { peerId: string; onSent: () =
           ].map((item) => (
             <button
               key={item.id}
-              class={`w-full shrink-0 truncate rounded-lg px-3 py-2 text-left text-xs transition ${tab === item.id && debouncedSearch.trim().length < 3 ? 'bg-sky-500/20 text-sky-200' : 'text-zinc-400 hover:bg-zinc-800'}`}
+              class={`w-full shrink-0 truncate rounded-lg px-3 py-2 text-left text-xs transition ${tab === item.id && debouncedSearch.trim().length < 3 ? 'bg-primary/15 text-primary' : 'text-muted'}`}
               type="button"
               title={item.label}
               onClick={() => { setSearch(''); setDebouncedSearch(''); setTab(item.id) }}
@@ -226,14 +226,14 @@ export function MessageStickerPackViewer({
   const error = packQuery.error ?? sendSticker.error ?? setInstalled.error
 
   return (
-    <section class="fixed left-1/2 top-1/2 z-50 flex max-h-[80vh] w-[min(42rem,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl border border-zinc-700 bg-zinc-900 shadow-2xl shadow-black/60">
-      <header class="flex items-center gap-3 border-b border-zinc-800 p-3">
+    <section class="fixed left-1/2 top-1/2 z-50 flex max-h-[80vh] w-[min(42rem,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl border border-base-300 bg-base-100 shadow-2xl shadow-black/60">
+      <header class="flex items-center gap-3 border-b border-base-300 p-3">
         <div class="min-w-0 flex-1">
           <h2 class="truncate font-medium">{pack?.title ?? 'Sticker pack'}</h2>
-          {pack && <p class="text-xs text-zinc-500">{pack.count} stickers</p>}
+          {pack && <p class="text-xs text-muted">{pack.count} stickers</p>}
         </div>
         <button
-          class={`shrink-0 rounded-xl border px-3 py-2 text-xs font-semibold transition ${large ? 'border-sky-500 bg-sky-500/20 text-sky-200' : 'border-zinc-700 bg-zinc-800 text-zinc-300 hover:bg-zinc-700'}`}
+          class={`shrink-0 rounded-xl border px-3 py-2 text-xs font-semibold transition ${large ? 'border-primary bg-primary/15 text-primary' : 'border-base-300 bg-base-300 text-base-content'}`}
           type="button"
           title="Show sticker previews two times larger"
           aria-label="Show sticker previews two times larger"
@@ -253,12 +253,12 @@ export function MessageStickerPackViewer({
         />
       </div>
       {(error || (pack && !installed)) && (
-        <footer class="border-t border-zinc-800 p-3">
-          {error && <p role="alert" class={`${pack && !installed ? 'mb-2 ' : ''}text-xs text-red-300`}>{error.message}</p>}
+        <footer class="border-t border-base-300 p-3">
+          {error && <p role="alert" class={`${pack && !installed ? 'mb-2 ' : ''}text-xs text-error`}>{error.message}</p>}
           {pack && !installed && (
             <button
               type="button"
-              class="w-full rounded-xl bg-sky-500 px-4 py-2 text-sm font-medium text-white transition hover:bg-sky-400 disabled:cursor-not-allowed disabled:opacity-40"
+              class="w-full rounded-xl bg-primary px-4 py-2 text-sm font-medium text-primary-content transition disabled:opacity-40"
               disabled={setInstalled.isPending}
               onClick={() => setInstalled.mutate({ pack, installed: true })}
             >
