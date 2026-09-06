@@ -1,6 +1,7 @@
 const DATABASE_VERSION = 1
 const CLEANUP_INTERVAL = 10 * 60_000
-const MAX_ENTRY_AGE = 7 * 24 * 60 * 60_000
+const ACCESS_UPDATE_INTERVAL = 60 * 60_000
+const MAX_ENTRY_AGE = 3 * 24 * 60 * 60_000
 
 interface MediaAccess {
   lastAccessed: number
@@ -94,7 +95,12 @@ export function openBlobCache(accountId: string): BlobCache {
       try {
         blob = await requestResult(transaction.objectStore('blobs').get(key)) as Blob | undefined
         if (blob !== undefined) {
-          transaction.objectStore('access').put({ lastAccessed: Date.now() } satisfies MediaAccess, key)
+          const access = transaction.objectStore('access')
+          const previous = await requestResult(access.get(key)) as MediaAccess | undefined
+          const now = Date.now()
+          if (!previous || now - previous.lastAccessed > ACCESS_UPDATE_INTERVAL) {
+            access.put({ lastAccessed: now } satisfies MediaAccess, key)
+          }
         }
       } catch (error) {
         await completed.catch(() => undefined)

@@ -1,11 +1,19 @@
 import type { TelefastClient } from '../telegram'
+import type { FileLocation } from '@mtcute/web'
 import type { BlobCache } from './blob-cache'
+import { streamedMediaUrl } from './media-stream'
 
-export async function cachedMediaUrl(
+const BLOB_CACHE_SIZE_LIMIT = 10 * 1024 * 1024
+type DownloadableMedia = Parameters<TelefastClient['downloadAsBuffer']>[0]
+
+export function shouldUseBlobCache(fileSize: number | undefined) {
+  return fileSize == null || fileSize < BLOB_CACHE_SIZE_LIMIT
+}
+export async function cachedMediaBlob(
   cache: BlobCache,
   client: TelefastClient,
   key: string,
-  source: Parameters<TelefastClient['downloadAsBuffer']>[0],
+  source: DownloadableMedia,
   mimeType: string,
 ) {
   let blob: Blob | undefined
@@ -26,5 +34,19 @@ export async function cachedMediaUrl(
     }
   }
 
-  return URL.createObjectURL(blob)
+  return blob
+}
+
+export async function mediaUrl(
+  cache: BlobCache,
+  client: TelefastClient,
+  key: string,
+  source: FileLocation,
+  mimeType: string,
+  fileName?: string | null,
+) {
+  if (!shouldUseBlobCache(source.fileSize)) {
+    return streamedMediaUrl(source, mimeType, fileName)
+  }
+  return URL.createObjectURL(await cachedMediaBlob(cache, client, key, source, mimeType))
 }

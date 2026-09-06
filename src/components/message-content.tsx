@@ -2,12 +2,9 @@ import { useEffect, useRef, useState } from 'preact/hooks'
 import { useQuery } from '@tanstack/preact-query'
 import type { FileLocation, Message, MessageAction } from '@mtcute/web'
 import type { TelefastClient } from '../telegram'
-import { cachedMediaUrl } from '../telegram/media-cache'
-import { streamedMediaUrl } from '../telegram/media-stream'
+import { mediaUrl } from '../telegram/media-cache'
 import { useTelegram } from '../telegram/telegram-provider'
 import { MessageText, useVisible } from './media'
-
-const AUTO_IMAGE_LIMIT = 10 * 1024 * 1024
 
 function useMediaUrl(
   telegram: TelefastClient | null,
@@ -15,11 +12,12 @@ function useMediaUrl(
   source: FileLocation | undefined,
   mimeType: string,
   visible: boolean,
+  fileName?: string | null,
 ) {
   const { blobCache } = useTelegram()
   return useQuery({
     queryKey: ['telegram', 'media-url', key],
-    queryFn: () => cachedMediaUrl(blobCache!, telegram!, key, source!, mimeType),
+    queryFn: () => mediaUrl(blobCache!, telegram!, key, source!, mimeType, fileName),
     enabled: Boolean(blobCache && telegram && source && visible),
     staleTime: 'static',
     gcTime: 10 * 60_000,
@@ -76,16 +74,14 @@ function PhotoView({ message, telegram }: { message: Message; telegram: Telefast
   const hostRef = useRef<HTMLDivElement | null>(null)
   const visible = useVisible(hostRef, '240px')
   const source = photo.getThumbnail('x') ?? photo.getThumbnail('m') ?? photo.getThumbnail('s') ?? photo
-  const useBlob = source.fileSize != null && source.fileSize <= AUTO_IMAGE_LIMIT
-  const blob = useMediaUrl(
+  const media = useMediaUrl(
     telegram,
     `photo-${source.uniqueFileId}`,
     source,
     'image/jpeg',
-    visible && useBlob,
+    visible,
   )
-  const streamUrl = streamedMediaUrl(source, 'image/jpeg')
-  const url = useBlob ? blob.data : streamUrl
+  const url = media.data ?? ''
 
   return (
     <div
@@ -114,11 +110,16 @@ function VideoView({ message, telegram }: { message: Message; telegram: Telefast
     'image/jpeg',
     visible,
   )
-  const url = streamedMediaUrl(
+  const media = useMediaUrl(
+    telegram,
+    `video-${video.uniqueFileId}`,
     video,
     video.mimeType || 'video/mp4',
+    visible,
     video.fileName,
   )
+  const posterUrl = poster.data
+  const url = media.data ?? ''
   const fileName = video.fileName || (video.isAnimation ? 'animation.mp4' : 'video.mp4')
 
   useEffect(() => {
@@ -143,7 +144,7 @@ function VideoView({ message, telegram }: { message: Message; telegram: Telefast
           class="block w-full rounded-lg bg-base-100 object-contain"
           style={{ aspectRatio: `${video.width} / ${video.height}` }}
           src={visible ? url : undefined}
-          poster={poster.data}
+          poster={posterUrl}
           controls={!video.isAnimation}
           loop={video.isAnimation}
           muted={video.isAnimation}
@@ -180,13 +181,13 @@ function DocumentView({ message, telegram }: { message: Message; telegram: Telef
   const thumbnail = image || video
     ? document.getThumbnail('m') ?? document.getThumbnail('s') ?? document.thumbnails[0]
     : undefined
-  const useBlob = image && document.fileSize != null && document.fileSize <= AUTO_IMAGE_LIMIT
-  const blob = useMediaUrl(
+  const media = useMediaUrl(
     telegram,
     `document-${document.uniqueFileId}`,
     document,
     document.mimeType || 'application/octet-stream',
-    visible && useBlob,
+    visible,
+    document.fileName,
   )
   const poster = useMediaUrl(
     telegram,
@@ -195,12 +196,8 @@ function DocumentView({ message, telegram }: { message: Message; telegram: Telef
     'image/jpeg',
     visible && video,
   )
-  const streamUrl = streamedMediaUrl(
-    document,
-    document.mimeType || 'application/octet-stream',
-    document.fileName,
-  )
-  const url = useBlob ? blob.data : streamUrl
+  const posterUrl = poster.data
+  const url = media.data ?? ''
 
   if (video) {
     const width = thumbnail?.width ?? 320
@@ -215,13 +212,13 @@ function DocumentView({ message, telegram }: { message: Message; telegram: Telef
         <video
           class="block w-full rounded-lg bg-base-100 object-contain"
           style={{ aspectRatio: `${width} / ${height}` }}
-          src={visible ? streamUrl : undefined}
-          poster={poster.data}
+          src={visible ? url : undefined}
+          poster={posterUrl}
           controls
           playsInline
           preload="metadata"
         />
-        <div class="mt-2"><MediaDownloadLink url={streamUrl} fileName={fileName} /></div>
+        <div class="mt-2"><MediaDownloadLink url={url} fileName={fileName} /></div>
       </div>
     )
   }
@@ -244,7 +241,7 @@ function DocumentView({ message, telegram }: { message: Message; telegram: Telef
 
   return (
     <a
-      href={streamUrl}
+      href={url}
       download={document.fileName ?? undefined}
       class="flex max-w-full items-center gap-3 rounded-lg border border-base-300 bg-base-200/40 p-3"
     >
@@ -257,9 +254,17 @@ function DocumentView({ message, telegram }: { message: Message; telegram: Telef
   )
 }
 
-function AudioView({ message }: { message: Message; telegram: TelefastClient | null }) {
+function AudioView({ message, telegram }: { message: Message; telegram: TelefastClient | null }) {
   const audio = message.media as Extract<NonNullable<Message['media']>, { type: 'audio' }>
-  const url = streamedMediaUrl(audio, audio.mimeType || 'audio/mpeg', audio.fileName)
+  const media = useMediaUrl(
+    telegram,
+    `audio-${audio.uniqueFileId}`,
+    audio,
+    audio.mimeType || 'audio/mpeg',
+    true,
+    audio.fileName,
+  )
+  const url = media.data ?? ''
 
   return (
     <div class="max-w-full">
@@ -270,9 +275,17 @@ function AudioView({ message }: { message: Message; telegram: TelefastClient | n
   )
 }
 
-function VoiceView({ message }: { message: Message; telegram: TelefastClient | null }) {
+function VoiceView({ message, telegram }: { message: Message; telegram: TelefastClient | null }) {
   const voice = message.media as Extract<NonNullable<Message['media']>, { type: 'voice' }>
-  const url = streamedMediaUrl(voice, voice.mimeType || 'audio/ogg', voice.fileName)
+  const media = useMediaUrl(
+    telegram,
+    `voice-${voice.uniqueFileId}`,
+    voice,
+    voice.mimeType || 'audio/ogg',
+    true,
+    voice.fileName,
+  )
+  const url = media.data ?? ''
 
   return (
     <div class="max-w-full">

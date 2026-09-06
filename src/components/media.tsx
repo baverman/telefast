@@ -3,9 +3,8 @@ import { useEffect, useRef, useState } from 'preact/hooks'
 import { useQuery } from '@tanstack/preact-query'
 import type { Dialog, Message } from '@mtcute/web'
 import type { TelefastClient } from '../telegram'
-import { cachedMediaUrl } from '../telegram/media-cache'
+import { cachedMediaBlob, mediaUrl, shouldUseBlobCache } from '../telegram/media-cache'
 import { useTelegram } from '../telegram/telegram-provider'
-
 export function initials(name = '?') {
   return name.split(/\s+/).slice(0, 2).map((part) => part[0]).join('').toUpperCase()
 }
@@ -140,7 +139,7 @@ export function Avatar({
   const photoKey = photo?.uniqueFileId ?? ''
   const avatar = useQuery({
     queryKey: ['telegram', 'media-url', `avatar-${photoKey}`],
-    queryFn: () => cachedMediaUrl(blobCache!, telegram!, `avatar-${photoKey}`, photo!, 'image/jpeg'),
+    queryFn: () => mediaUrl(blobCache!, telegram!, `avatar-${photoKey}`, photo!, 'image/jpeg'),
     enabled: Boolean(blobCache && telegram && photo && visible),
     staleTime: 'static',
     gcTime: 10 * 60_000,
@@ -188,29 +187,35 @@ export function StickerView({
            queryKey: animated && !previewing
              ? ['telegram', 'sticker-file', mediaKey]
              : ['telegram', 'media-url', mediaKey],
-           queryFn: async (): Promise<string | Uint8Array | null> => {
+           queryFn: async (): Promise<Blob | string | null> => {
              if (!telegram) return null
              if (previewing) {
                if (!thumbnail) return null
-               return cachedMediaUrl(blobCache!, telegram, mediaKey, thumbnail, 'image/jpeg')
+               return mediaUrl(blobCache!, telegram, mediaKey, thumbnail, 'image/jpeg')
              }
-             if (animated) return telegram.downloadAsBuffer(sticker)
-             return cachedMediaUrl(blobCache!, telegram, mediaKey, sticker, mimeType)
+             if (animated) {
+               if (shouldUseBlobCache(sticker.fileSize)) {
+                 return cachedMediaBlob(blobCache!, telegram, mediaKey, sticker, mimeType)
+               }
+               const bytes = await telegram.downloadAsBuffer(sticker)
+               return new Blob([Uint8Array.from(bytes)])
+             }
+             return mediaUrl(blobCache!, telegram, mediaKey, sticker, mimeType)
            },
            enabled: Boolean(blobCache && telegram && visible),
            staleTime: 'static',
            gcTime: 10 * 60_000,
          })
          const source = typeof stickerQuery.data === 'string' ? stickerQuery.data : ''
-         const bytes = stickerQuery.data instanceof Uint8Array ? stickerQuery.data : undefined
+         const animationBlob = stickerQuery.data instanceof Blob ? stickerQuery.data : undefined
 
          useEffect(() => {
            const animationHost = animationHostRef.current
-           if (!bytes || !animated || !animationHost) return
+           if (!animationBlob || !animationHost) return
            let active = true
            void (async () => {
              const animationData = await new Response(
-               new Blob([Uint8Array.from(bytes)]).stream().pipeThrough(new DecompressionStream('gzip')),
+               animationBlob.stream().pipeThrough(new DecompressionStream('gzip')),
              ).json()
              const { default: lottie } = await import('lottie-web/build/player/lottie_light')
              if (!active) return
@@ -229,7 +234,7 @@ export function StickerView({
              lottieRef.current?.destroy()
              lottieRef.current = null
            }
-         }, [animated, bytes])
+         }, [animationBlob])
 
          useEffect(() => {
            if (shouldPlay) lottieRef.current?.play()
