@@ -1,6 +1,6 @@
 import { createContext, type ComponentChildren } from 'preact'
 import { useContext, useEffect, useRef, useState } from 'preact/hooks'
-import type { SentCode } from '@mtcute/web'
+import type { Dialog, SentCode } from '@mtcute/web'
 import { QueryClient, QueryClientProvider } from '@tanstack/preact-query'
 import { useLocation } from 'preact-iso'
 import { createTelegramConnection, type TelefastClient } from '../telegram'
@@ -35,7 +35,7 @@ interface AccountResources {
 function createAccountResources(accountId: string): AccountResources {
   const queryClient = new QueryClient({
     defaultOptions: {
-      queries: { retry: 1, refetchOnWindowFocus: true, gcTime: 10 * 60_000 },
+      queries: { retry: 1, refetchOnWindowFocus: true, staleTime: 5 * 60_000, gcTime: 10 * 60_000 },
       mutations: { retry: 0 },
     },
   })
@@ -430,10 +430,20 @@ export function TelegramProvider({ children, fallback }: { children: ComponentCh
     const telegram = connectionRef.current?.client
     const dialog = cachedDialog(queryClient(), peerId)
     if (!telegram || !dialog) return
+    const client = queryClient()
+    const dialogKey = telegramKeys.dialog(peerId)
+    const previous = { unreadCount: dialog.raw.unreadCount, unreadMark: dialog.raw.unreadMark }
+    dialog.raw.unreadCount = 0
+    dialog.raw.unreadMark = false
+    client.setQueryData<Dialog[]>(telegramKeys.dialogs(), (current) => current ? [...current] : current)
     try {
       await telegram.readHistory(dialog.peer)
-      await queryClient().invalidateQueries({ queryKey: telegramKeys.dialogs() })
+      await client.invalidateQueries({ queryKey: telegramKeys.dialogs() })
+      await client.invalidateQueries({ queryKey: dialogKey })
     } catch (error) {
+      dialog.raw.unreadCount = previous.unreadCount
+      dialog.raw.unreadMark = previous.unreadMark
+      client.setQueryData<Dialog[]>(telegramKeys.dialogs(), (current) => current ? [...current] : current)
       console.error('[Telefast] Failed to mark chat as read', error)
     }
   }

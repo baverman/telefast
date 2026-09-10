@@ -50,7 +50,6 @@ export function useDialogs() {
       return next
     },
     enabled: status === 'authenticated' && Boolean(client),
-    staleTime: 30_000,
   })
 }
 
@@ -62,7 +61,6 @@ export function useDialog(peerId?: string) {
     queryFn: () => resolveDialog(client!, queryClient, peerId!),
     enabled: status === 'authenticated' && Boolean(client && peerId),
     initialData: peerId ? cachedDialog(queryClient, peerId) : undefined,
-    staleTime: Infinity,
     retry: false,
   })
 }
@@ -178,7 +176,6 @@ function useMessageHistory(peerId: string, threadId?: number, pinned = false, ta
     getNextPageParam: (page) => page.next ?? undefined,
     getPreviousPageParam: (page) => page.previous,
     enabled: status === 'authenticated' && Boolean(client && dialog.data && (searchQuery == null || searchQuery)),
-    staleTime: Infinity,
   })
 
   const messages = useMemo(() => [...(query.data?.pages ?? [])]
@@ -220,7 +217,6 @@ export function useCanPinMessages(peerId: string) {
         || peer.permissions?.canPinMessages === true
     },
     enabled: status === 'authenticated' && Boolean(client && dialog.data),
-    staleTime: 5 * 60_000,
   })
 }
 
@@ -258,7 +254,6 @@ export function useStickers() {
       }
     },
     enabled: status === 'authenticated' && Boolean(client),
-    staleTime: 5 * 60_000,
   })
 }
 
@@ -269,7 +264,6 @@ export function useStickerSet(sticker?: Sticker | null) {
     queryKey: ['telegram', 'sticker-set', sticker?.uniqueFileId ?? ''],
     queryFn: () => client!.getStickerSet(sticker!.inputStickerSet!),
     enabled: status === 'authenticated' && Boolean(client && sticker?.hasStickerSet && sticker.inputStickerSet),
-    staleTime: 5 * 60_000,
     retry: false,
   })
 }
@@ -469,7 +463,6 @@ export function useBotCommands(peerId: string) {
       return []
     },
     enabled: status === 'authenticated' && Boolean(client),
-    staleTime: 5 * 60_000,
     retry: 0,
   })
 }

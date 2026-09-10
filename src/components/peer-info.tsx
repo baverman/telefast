@@ -39,7 +39,6 @@ export function PeerInfo({ peerId }: { peerId: string }) {
       return peer.type === 'user' ? client!.getFullUser(peer) : client!.getFullChat(peer)
     },
     enabled: Boolean(client && peer),
-    staleTime: 5 * 60_000,
     retry: false,
   })
 

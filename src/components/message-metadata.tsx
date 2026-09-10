@@ -30,7 +30,6 @@ export function MessageMetadata({
     queryKey: ['telegram', 'message-reply', String(message.chat.id), message.id, reply?.id],
     queryFn: () => telegram!.getReplyTo(message),
     enabled: Boolean(telegram && canFetchReply),
-    staleTime: Infinity,
     retry: false,
   })
 
