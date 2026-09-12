@@ -23,6 +23,7 @@
     "@preact/preset-vite": "latest",
     "@tailwindcss/vite": "latest",
     "@types/node": "latest",
+    "@vitest/ui": "4.1.11",
     "eslint": "latest",
     "globals": "latest",
     "tailwindcss": "latest",

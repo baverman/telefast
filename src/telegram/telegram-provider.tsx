@@ -6,7 +6,8 @@ import { useLocation } from 'preact-iso'
 import { createTelegramConnection, type TelefastClient } from '../telegram'
 import { activeChatPeerId } from './active-chat'
 import { openBlobCache, type BlobCache } from './blob-cache'
-import { appendMessage, cachedDialog, telegramKeys } from './query-data'
+import { cachedDialog, telegramKeys } from './query-data'
+import { chunkForMessage, type MessageStore } from './message-store'
 import { setMediaStreamClient } from './media-stream'
 import { isGroupPeer, isSupportedPeer, messageText } from './model'
 
@@ -93,6 +94,11 @@ interface TelegramContextValue {
   clearError(): void
   setNotificationsEnabled(enabled: boolean): Promise<void>
   markRead(peerId: string): Promise<void>
+  messageStores: Map<string, MessageStore>
+}
+
+export function messageStoreKey(peerId: string, threadId?: number) {
+  return threadId != null ? `${peerId}:${threadId}` : peerId
 }
 
 const TelegramContext = createContext<TelegramContextValue | null>(null)
@@ -160,6 +166,7 @@ export function TelegramProvider({ children, fallback }: { children: ComponentCh
   const notificationsEnabledRef = useRef(initialNotificationsEnabled)
   const connectionRef = useRef<Connection | null>(null)
   const resourcesRef = useRef<AccountResources | null>(null)
+  const storesRef = useRef(new Map<string, MessageStore>())
   const recoveringConnectionRef = useRef(false)
   const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const codeResolver = useRef<Resolver | null>(null)
@@ -171,6 +178,7 @@ export function TelegramProvider({ children, fallback }: { children: ComponentCh
     if (!current) throw new Error('Telegram account resources are not ready')
     return current
   }
+
   function attachUpdates(telegram: TelefastClient, accountQueryClient: QueryClient) {
     telegram.onConnectionState.add((state) => {
       console.log('[Telefast] Telegram connection state:', state)
@@ -185,7 +193,13 @@ export function TelegramProvider({ children, fallback }: { children: ComponentCh
       if (!isSupportedPeer(message.chat)) return
       const peerId = String(message.chat.id)
       const isCurrent = activeChatPeerId === peerId
-      appendMessage(accountQueryClient, peerId, message)
+      const rootStore = storesRef.current.get(messageStoreKey(peerId))
+      if (rootStore) rootStore.update(chunkForMessage(message))
+      const messageThreadId = message.replyToMessage?.threadId
+      if (messageThreadId != null) {
+        const threadStore = storesRef.current.get(messageStoreKey(peerId, messageThreadId))
+        if (threadStore) threadStore.update(chunkForMessage(message))
+      }
       const target = cachedDialog(accountQueryClient, peerId)
 
       console.log('[Telefast] notification check', {
@@ -285,6 +299,7 @@ export function TelegramProvider({ children, fallback }: { children: ComponentCh
     let accountResources = resourcesRef.current
     if (!accountResources || accountResources.accountId !== accountId) {
       if (accountResources) discardAccountResources(accountResources)
+      storesRef.current.clear()
       accountResources = createAccountResources(accountId)
       resourcesRef.current = accountResources
       setResources(accountResources)
@@ -483,6 +498,7 @@ export function TelegramProvider({ children, fallback }: { children: ComponentCh
       connectionRef.current = null
       const currentResources = resourcesRef.current
       if (currentResources) discardAccountResources(currentResources)
+      storesRef.current.clear()
       resourcesRef.current = null
       setResources(null)
       setAuthStep('credentials')
@@ -496,7 +512,7 @@ export function TelegramProvider({ children, fallback }: { children: ComponentCh
     status, authStep, passwordHint, deliveryLabel, busy, error, client,
     blobCache: resources?.blobCache ?? null,
     notificationPermission, notificationsEnabled, beginLogin, submitCode, submitPassword, logout, reconnect,
-    clearError: () => setError(''), setNotificationsEnabled, markRead,
+    clearError: () => setError(''), setNotificationsEnabled, markRead, messageStores: storesRef.current,
   }
 
   const content = status === 'authenticated' && resources

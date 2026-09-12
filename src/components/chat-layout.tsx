@@ -7,6 +7,23 @@ import { ChatSidebar } from './chat-sidebar'
 import { Conversation, EmptyConversation, PinnedConversation, SearchConversation } from './conversation'
 import { PeerInfo } from './peer-info'
 
+type ConversationProps = { peerId: string; query: Record<string, string | undefined> }
+
+function KeyedConversation(props: ConversationProps) {
+  const key = `${props.peerId}:${props.query.thread ?? ''}:${props.query.message ?? ''}`
+  return <Conversation key={key} {...props} />
+}
+
+function KeyedPinnedConversation(props: ConversationProps) {
+  const key = `${props.peerId}:${props.query.thread ?? ''}`
+  return <PinnedConversation key={key} {...props} />
+}
+
+function KeyedSearchConversation(props: ConversationProps) {
+  const key = `${props.peerId}:${props.query.q ?? ''}`
+  return <SearchConversation key={key} {...props} />
+}
+
 export function ChatLayout() {
   const location = useLocation()
   const { error, clearError, markRead } = useTelegram()
@@ -32,9 +49,9 @@ export function ChatLayout() {
       <div class="flex min-h-0 min-w-0 flex-1 overflow-hidden">
         <Router>
           <Route path="/" component={EmptyConversation} />
-          <Route path="/:peerId" component={Conversation} />
-          <Route path="/:peerId/pinned" component={PinnedConversation} />
-          <Route path="/:peerId/search" component={SearchConversation} />
+          <Route path="/:peerId" component={KeyedConversation} />
+          <Route path="/:peerId/pinned" component={KeyedPinnedConversation} />
+          <Route path="/:peerId/search" component={KeyedSearchConversation} />
           <Route path="/:peerId/info" component={PeerInfo} />
           <Route default component={EmptyConversation} message="Page not found" />
         </Router>

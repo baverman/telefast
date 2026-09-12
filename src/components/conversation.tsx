@@ -2,7 +2,7 @@ import { useEffect, useState } from 'preact/hooks'
 import { useLocation } from 'preact-iso'
 import type { Message } from '@mtcute/web'
 import { useTelegram } from '../telegram/telegram-provider'
-import { useCanPinMessages, useDialog, usePinnedMessages, type MessageReplyTarget } from '../telegram/queries'
+import { useCanPinMessages, useDialog, usePinnedMessageCount, type MessageReplyTarget } from '../telegram/queries'
 import { canSendMessages } from '../telegram/model'
 import { Avatar } from './media'
 import { MessageList } from './message-list'
@@ -46,7 +46,8 @@ export function Conversation({ peerId }: { peerId: string }) {
   const [edit, setEdit] = useState<Message | null>(null)
   const threadId = Number.isSafeInteger(Number(location.query.thread)) ? Number(location.query.thread) : undefined
   const targetMessageId = Number.isSafeInteger(Number(location.query.message)) ? Number(location.query.message) : undefined
-  const pinnedMessages = usePinnedMessages(peerId, threadId)
+  const pinnedCount = usePinnedMessageCount(peerId, threadId)
+  const pinnedTotal = pinnedCount.data ?? 0
   const canPinMessages = useCanPinMessages(peerId)
   const infoQuery = new URLSearchParams()
   if (threadId != null) infoQuery.set('thread', String(threadId))
@@ -74,17 +75,17 @@ export function Conversation({ peerId }: { peerId: string }) {
           <strong class="truncate text-sm font-medium">{dialog.peer.displayName}</strong>
         </a>
         <MessageSearchField peerId={peerId} />
-        {pinnedMessages.total > 0 && (
+        {pinnedTotal > 0 && (
           <a
             href={pinnedHref}
             class="icon-button grid-flow-col gap-1 px-2 text-xs"
-            aria-label={`View ${pinnedMessages.total} pinned messages`}
+            aria-label={`View ${pinnedTotal} pinned messages`}
             title="Pinned messages"
           >
             <svg aria-hidden="true" viewBox="0 0 24 24" class="size-4" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
               <path d="M12 17v5M5 17h14M17 17v-5l-2-2V5h1V2H8v3h1v5l-2 2v5" />
             </svg>
-            <span class="tabular-nums">{pinnedMessages.total}</span>
+            <span class="tabular-nums">{pinnedTotal}</span>
           </a>
         )}
       </header>

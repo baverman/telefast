@@ -1,9 +1,10 @@
 import { Long, SearchFilters, Sticker, type Dialog, type StickerSet, type tl } from '@mtcute/web'
-import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/preact-query'
-import { useMemo } from 'preact/hooks'
-import { useTelegram } from './telegram-provider'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/preact-query'
+import { chunkForMessage } from './message-store'
+import { useTelegram, messageStoreKey } from './telegram-provider'
 import { dialogId, isSupportedDialog } from './model'
-import { appendMessage, cachedDialog, removeMessage, telegramKeys, upsertMessage, type HistoryPage, type StickerData } from './query-data'
+import { cachedDialog, telegramKeys, type StickerData } from './query-data'
+import { resolveDialog } from './resolve-dialog'
 
 async function loadDialogs(client: NonNullable<ReturnType<typeof useTelegram>['client']>) {
   const dialogs: Dialog[] = []
@@ -13,25 +14,8 @@ async function loadDialogs(client: NonNullable<ReturnType<typeof useTelegram>['c
   return dialogs
 }
 
-async function resolveDialog(
-  client: NonNullable<ReturnType<typeof useTelegram>['client']>,
-  queryClient: ReturnType<typeof useQueryClient>,
-  peerId: string,
-) {
-  const cached = cachedDialog(queryClient, peerId)
-  if (cached) return cached
-  const numericPeerId = Number(peerId)
-  if (!Number.isSafeInteger(numericPeerId)) throw new Error('Invalid Telegram peer')
-  const [dialog] = await client.getPeerDialogs([numericPeerId])
-  if (!dialog || !isSupportedDialog(dialog)) throw new Error('Telegram chat not found')
-  queryClient.setQueryData<Dialog[]>(telegramKeys.dialogs(), (current = []) => (
-    current.some((item) => dialogId(item) === peerId) ? current : [...current, dialog]
-  ))
-  return dialog
-}
-
 export function useDialogs() {
-  const { client, status } = useTelegram()
+  const { client, status, messageStores } = useTelegram()
   const queryClient = useQueryClient()
   return useQuery({
     queryKey: telegramKeys.dialogs(),
@@ -43,7 +27,7 @@ export function useDialogs() {
       const retained = [...current, ...resolved]
       retained.forEach((dialog) => {
         const id = dialogId(dialog)
-        const hasCachedChat = Boolean(queryClient.getQueryData(telegramKeys.messages(id)))
+        const hasCachedChat = (messageStores.get(id)?.chunks.length ?? 0) > 0
         const hasResolvedDialog = resolved.some((item) => dialogId(item) === id)
         if ((hasCachedChat || hasResolvedDialog) && !next.some((item) => dialogId(item) === id)) next.push(dialog)
       })
@@ -65,140 +49,26 @@ export function useDialog(peerId?: string) {
   })
 }
 
-type MessageWindowPageParam = {
-  direction: 'center' | 'older' | 'newer'
-  id: number
-  date?: number
-}
-
-type MessageHistoryPage = Omit<HistoryPage, 'next'> & {
-  next: HistoryPage['next'] | MessageWindowPageParam
-  total?: number
-  previous?: MessageWindowPageParam
-}
-
-function messageDate(message: import('@mtcute/web').Message) {
-  return Math.floor(message.date.getTime() / 1000)
-}
-
-function useMessageHistory(peerId: string, threadId?: number, pinned = false, targetMessageId?: number, searchQuery?: string) {
+/**
+ * Number of pinned messages in a chat. The header shows this count. It is not
+ * backed by the message store.
+ */
+export function usePinnedMessageCount(peerId: string, threadId?: number) {
   const { client, status } = useTelegram()
-  const queryClient = useQueryClient()
-  const dialog = useDialog(peerId)
-  const query = useInfiniteQuery({
-    queryKey: targetMessageId != null
-      ? telegramKeys.messageWindow(peerId, targetMessageId, threadId)
-      : searchQuery != null
-        ? telegramKeys.messageSearch(peerId, searchQuery)
-        : pinned
-          ? telegramKeys.pinnedMessages(peerId, threadId)
-          : telegramKeys.messages(peerId, threadId),
-    queryFn: async ({ pageParam }): Promise<MessageHistoryPage> => {
-      const target = dialog.data ?? await resolveDialog(client!, queryClient, peerId)
-
-      if (targetMessageId != null) {
-        const window = pageParam as MessageWindowPageParam
-        let result
-        if (threadId != null) {
-          result = await client!.searchMessages({
-            chatId: target.peer,
-            threadId,
-            limit: 50,
-            offset: window.id,
-            ...(window.direction === 'center' ? { addOffset: -25 } : {}),
-            ...(window.direction === 'newer' ? { addOffset: -50 } : {}),
-          })
-        } else {
-          let date = window.date
-          if (date == null) {
-            const [targetMessage] = await client!.getMessages(target.peer, window.id)
-            if (!targetMessage) throw new Error('Message not found')
-            date = messageDate(targetMessage)
-          }
-          result = await client!.getHistory(target.peer, {
-            limit: 50,
-            offset: { id: window.id, date },
-            ...(window.direction === 'center' ? { addOffset: -25 } : {}),
-            ...(window.direction === 'newer' ? { reverse: true } : {}),
-          })
-        }
-
-        const messages = [...result].sort((left, right) => left.id - right.id)
-        const oldest = messages[0]
-        const newest = messages[messages.length - 1]
-        const foundNewer = newest != null && newest.id > window.id
-        return {
-          messages,
-          next: window.direction !== 'newer' && result.next && oldest
-            ? { direction: 'older', id: oldest.id, date: messageDate(oldest) }
-            : null,
-          previous: window.direction !== 'older' && foundNewer && messages.length >= 49
-            ? { direction: 'newer', id: newest.id, date: messageDate(newest) }
-            : undefined,
-        }
-      }
-
-      const result = searchQuery != null
-        ? await client!.searchMessages({
-          chatId: target.peer,
-          query: searchQuery,
-          limit: 50,
-          ...(pageParam ? { offset: pageParam as number } : {}),
-        })
-        : pinned
-          ? await client!.searchMessages({
-            chatId: target.peer,
-            threadId,
-            filter: SearchFilters.Pinned,
-            limit: 50,
-            ...(pageParam ? { offset: pageParam as number } : {}),
-          })
-          : threadId != null
-            ? await client!.searchMessages({
-              chatId: target.peer,
-              threadId,
-              limit: 50,
-              ...(pageParam ? { offset: pageParam as number } : {}),
-            })
-            : await client!.getHistory(target.peer, {
-              limit: 50,
-              ...(pageParam ? { offset: pageParam as Exclude<HistoryPage['next'], number | null> } : {}),
-            })
-      return {
-        messages: [...result].reverse(),
-        next: (result.next ?? null) as HistoryPage['next'],
-        ...('total' in result ? { total: result.total } : {}),
-      }
+  return useQuery({
+    queryKey: telegramKeys.pinnedMessages(peerId, threadId),
+    queryFn: async () => {
+      const result = await client!.searchMessages({
+        chatId: Number(peerId),
+        threadId,
+        filter: SearchFilters.Pinned,
+        limit: 1,
+      })
+      if ('total' in result && typeof result.total === 'number') return result.total
+      return [...result].length
     },
-    initialPageParam: targetMessageId != null
-      ? { direction: 'center', id: targetMessageId } as MessageWindowPageParam
-      : null as HistoryPage['next'],
-    getNextPageParam: (page) => page.next ?? undefined,
-    getPreviousPageParam: (page) => page.previous,
-    enabled: status === 'authenticated' && Boolean(client && dialog.data && (searchQuery == null || searchQuery)),
+    enabled: status === 'authenticated' && Boolean(client),
   })
-
-  const messages = useMemo(() => [...(query.data?.pages ?? [])]
-    .reverse()
-    .flatMap((page) => page.messages)
-    .filter((message, index, all) => all.findIndex((item) => item.id === message.id) === index), [query.data])
-  const total = query.data?.pages[0]?.total ?? messages.length
-
-  return { ...query, messages, total, dialog: dialog.data, dialogError: dialog.error }
-}
-
-export function useMessages(
-  peerId: string,
-  threadId?: number,
-  pinned = false,
-  targetMessageId?: number,
-  searchQuery?: string,
-) {
-  return useMessageHistory(peerId, threadId, pinned, targetMessageId, searchQuery)
-}
-
-export function usePinnedMessages(peerId: string, threadId?: number) {
-  return useMessageHistory(peerId, threadId, true)
 }
 
 export function useCanPinMessages(peerId: string) {
@@ -302,7 +172,7 @@ export interface SendTextInput {
 }
 
 export function useSendText(peerId: string, threadId?: number) {
-  const { client } = useTelegram()
+  const { client, messageStores } = useTelegram()
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: async ({ text, reply }: SendTextInput) => {
@@ -323,14 +193,15 @@ export function useSendText(peerId: string, threadId?: number) {
       return client!.sendText(dialog.peer, input, options)
     },
     onSuccess: (message) => {
-      appendMessage(queryClient, peerId, message, threadId)
+      const store = messageStores.get(messageStoreKey(peerId, threadId))
+      if (store) store.update(chunkForMessage(message))
       void queryClient.invalidateQueries({ queryKey: telegramKeys.dialogs() })
     },
   })
 }
 
 export function useSendSticker(peerId: string) {
-  const { client } = useTelegram()
+  const { client, messageStores } = useTelegram()
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: async (sticker: Sticker) => {
@@ -339,7 +210,8 @@ export function useSendSticker(peerId: string) {
       return { sent, sticker }
     },
     onSuccess: ({ sent, sticker }) => {
-      appendMessage(queryClient, peerId, sent)
+      const store = messageStores.get(messageStoreKey(peerId))
+      if (store) store.update(chunkForMessage(sent))
       queryClient.setQueryData<StickerData>(telegramKeys.stickers(), (current) => current ? {
         ...current,
         recent: [sticker, ...current.recent.filter((item) => item.uniqueFileId !== sticker.uniqueFileId)],
@@ -350,7 +222,7 @@ export function useSendSticker(peerId: string) {
 }
 
 export function useSetMessagePinned(peerId: string, threadId?: number) {
-  const { client } = useTelegram()
+  const { client, messageStores } = useTelegram()
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: async ({ message, pinned }: { message: import('@mtcute/web').Message; pinned: boolean }) => {
@@ -366,19 +238,19 @@ export function useSetMessagePinned(peerId: string, threadId?: number) {
       await client!.unpinMessage({ message })
       return null
     },
-    onSuccess: async () => {
+    onSuccess: async (_result, { message, pinned }) => {
+      if (message.raw._ === 'message') message.raw.pinned = pinned
+      const store = messageStores.get(messageStoreKey(peerId, threadId))
+      if (store) store.update(chunkForMessage(message))
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: telegramKeys.pinnedMessages(peerId, threadId) }),
-        queryClient.invalidateQueries({ queryKey: telegramKeys.messages(peerId, threadId) }),
-        queryClient.invalidateQueries({ queryKey: telegramKeys.messageWindows(peerId) }),
-        queryClient.invalidateQueries({ queryKey: telegramKeys.messageSearches(peerId) }),
       ])
     },
   })
 }
 
 export function useSendReaction(peerId: string, threadId?: number) {
-  const { client } = useTelegram()
+  const { client, messageStores } = useTelegram()
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: async ({ messageId, emoji, remove }: { messageId: number; emoji: string; remove: boolean }) => {
@@ -390,27 +262,29 @@ export function useSendReaction(peerId: string, threadId?: number) {
       })
     },
     onSuccess: (updated) => {
-      if (updated) upsertMessage(queryClient, peerId, updated, threadId)
+      const store = messageStores.get(messageStoreKey(peerId, threadId))
+      if (updated && store) store.update(chunkForMessage(updated))
     },
   })
 }
 
 export function useEditMessage(peerId: string, threadId?: number) {
-  const { client } = useTelegram()
+  const { client, messageStores } = useTelegram()
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: ({ message, text }: { message: import('@mtcute/web').Message; text: string }) => (
       client!.editMessage({ message, text: text.trim() })
     ),
     onSuccess: (message) => {
-      upsertMessage(queryClient, peerId, message, threadId)
+      const store = messageStores.get(messageStoreKey(peerId, threadId))
+      if (store) store.update(chunkForMessage(message))
       void queryClient.invalidateQueries({ queryKey: telegramKeys.dialogs() })
     },
   })
 }
 
 export function useDeleteMessage(peerId: string, threadId?: number) {
-  const { client } = useTelegram()
+  const { client, messageStores } = useTelegram()
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: async ({ message, revoke }: { message: import('@mtcute/web').Message; revoke: boolean }) => {
@@ -418,19 +292,17 @@ export function useDeleteMessage(peerId: string, threadId?: number) {
       return message.id
     },
     onSuccess: async (messageId) => {
-      removeMessage(queryClient, peerId, messageId, threadId)
+      messageStores.get(messageStoreKey(peerId, threadId))?.remove(messageId)
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: telegramKeys.dialogs() }),
         queryClient.invalidateQueries({ queryKey: telegramKeys.pinnedMessages(peerId, threadId) }),
-        queryClient.invalidateQueries({ queryKey: telegramKeys.messageSearches(peerId) }),
-        queryClient.invalidateQueries({ queryKey: telegramKeys.messageWindows(peerId) }),
       ])
     }
   })
 }
 
 export function useForwardMessage() {
-  const { client } = useTelegram()
+  const { client, messageStores } = useTelegram()
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: async ({ message, toPeerId }: { message: import('@mtcute/web').Message; toPeerId: string }) => {
@@ -439,7 +311,8 @@ export function useForwardMessage() {
       return { forwarded, toPeerId }
     },
     onSuccess: ({ forwarded, toPeerId }) => {
-      forwarded.forEach((message) => appendMessage(queryClient, toPeerId, message))
+      const store = messageStores.get(messageStoreKey(toPeerId))
+      if (store) forwarded.forEach((message) => store.update(chunkForMessage(message)))
       void queryClient.invalidateQueries({ queryKey: telegramKeys.dialogs() })
     },
   })

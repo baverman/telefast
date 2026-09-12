@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks'
 import { useLocation } from 'preact-iso'
 import type { Dialog, Message } from '@mtcute/web'
-import { useTelegram, isGroupPeer } from '../telegram/telegram-provider'
-import { useMessages, type MessageReplyTarget } from '../telegram/queries'
+import { useTelegram, isGroupPeer, messageStoreKey } from '../telegram/telegram-provider'
+import type { MessageReplyTarget } from '../telegram/queries'
+import { useMessageView } from '../telegram/message-view'
 import { Avatar, StickerView, timeLabel } from './media'
 import { MessageContent } from './message-content'
 import { ReactionBar, MessageContextMenu } from './reaction-bar'
@@ -47,7 +48,16 @@ export function MessageList({
 }) {
   const { client } = useTelegram()
   const location = useLocation()
-  const history = useMessages(peerId, threadId, pinned, pinned ? undefined : targetMessageId, searchQuery)
+  const usingStore = !pinned && searchQuery == null
+  const anchorId = usingStore ? targetMessageId : undefined
+  const view = useMessageView(peerId, {
+    threadId,
+    anchorId,
+    search: searchQuery,
+    isPinned: pinned,
+    cacheKey: usingStore ? messageStoreKey(peerId, threadId) : undefined,
+  })
+  const messages = view.chain()
   const containerRef = useRef<HTMLDivElement | null>(null)
   const olderSentinelRef = useRef<HTMLDivElement | null>(null)
   const newerSentinelRef = useRef<HTMLDivElement | null>(null)
@@ -70,26 +80,11 @@ export function MessageList({
   } | null>(null)
   const [showScrollToLatest, setShowScrollToLatest] = useState(false)
   const initialScrollRef = useRef({
-    key: '',
-    lastReadIngoing: 0,
-    hasUnread: false,
-    targetMessageId: undefined as number | undefined,
+    lastReadIngoing: dialog.lastReadIngoing,
+    hasUnread: !pinned && searchQuery == null && threadId == null && dialog.unreadCount > 0,
+    targetMessageId,
     done: false,
   })
-  const chatKey = `${peerId}:${threadId ?? ''}:${targetMessageId ?? ''}:${pinned ? 'pinned' : searchQuery ?? 'history'}`
-
-  if (initialScrollRef.current.key !== chatKey) {
-    initialScrollRef.current = {
-      key: chatKey,
-      lastReadIngoing: dialog.lastReadIngoing,
-      hasUnread: !pinned && searchQuery == null && threadId == null && dialog.unreadCount > 0,
-      targetMessageId,
-      done: false,
-    }
-    previousLatestIdRef.current = undefined
-    pendingOlderScrollRef.current = null
-    nearBottomRef.current = true
-  }
 
   async function openComments(post: Message) {
     if (!client) return
@@ -114,8 +109,8 @@ export function MessageList({
     if (
       !container
       || !initialScrollRef.current.done
-      || !history.hasNextPage
-      || history.isFetchingNextPage
+      || !view.canLoadPrev
+      || view.isPrevLoading
       || pendingOlderScrollRef.current
     ) return
 
@@ -125,26 +120,26 @@ export function MessageList({
 
     pendingOlderScrollRef.current = {
       messageId: firstVisible?.dataset.messageId,
-      oldestMessageId: history.messages[0]?.id,
+      oldestMessageId: messages[0]?.id,
       offset: firstVisible ? firstVisible.getBoundingClientRect().top - containerTop : 0,
       scrollHeight: container.scrollHeight,
       scrollTop: container.scrollTop,
     }
 
-    void history.fetchNextPage().catch(() => {
+    void view.loadPrev().catch(() => {
       pendingOlderScrollRef.current = null
     })
-  }, [history.fetchNextPage, history.hasNextPage, history.isFetchingNextPage, history.messages])
+  }, [view.loadPrev, view.canLoadPrev, view.isPrevLoading, messages])
 
   const loadNewer = useCallback(() => {
-    if (!targetMessageId || !history.hasPreviousPage || history.isFetchingPreviousPage) return
-    void history.fetchPreviousPage()
-  }, [history.fetchPreviousPage, history.hasPreviousPage, history.isFetchingPreviousPage, targetMessageId])
+    if (!targetMessageId || !view.canLoadNext || view.isNextLoading) return
+    void view.loadNext()
+  }, [view.loadNext, view.canLoadNext, view.isNextLoading, targetMessageId])
 
   useEffect(() => {
     const container = containerRef.current
     const sentinel = olderSentinelRef.current
-    if (!container || !sentinel || !history.hasNextPage) return
+    if (!container || !sentinel || !view.canLoadPrev) return
 
     const observer = new IntersectionObserver((entries) => {
       if (entries.some((entry) => entry.isIntersecting)) loadOlder()
@@ -152,12 +147,12 @@ export function MessageList({
 
     observer.observe(sentinel)
     return () => observer.disconnect()
-  }, [history.hasNextPage, loadOlder])
+  }, [view.canLoadPrev, loadOlder])
 
   useEffect(() => {
     const container = containerRef.current
     const sentinel = newerSentinelRef.current
-    if (!container || !sentinel || !history.hasPreviousPage) return
+    if (!container || !sentinel || !view.canLoadNext) return
 
     const observer = new IntersectionObserver((entries) => {
       if (entries.some((entry) => entry.isIntersecting)) loadNewer()
@@ -165,22 +160,22 @@ export function MessageList({
 
     observer.observe(sentinel)
     return () => observer.disconnect()
-  }, [history.hasPreviousPage, loadNewer])
+  }, [view.canLoadNext, loadNewer])
 
   useLayoutEffect(() => {
     const container = containerRef.current
-    const latestMessage = history.messages[history.messages.length - 1]
+    const latestMessage = messages[messages.length - 1]
     const previousLatestId = previousLatestIdRef.current
     const latestChanged = previousLatestId != null && latestMessage?.id !== previousLatestId
     const isNewOutgoing = !pinned && searchQuery == null && targetMessageId == null && latestChanged && latestMessage?.isOutgoing === true
     previousLatestIdRef.current = latestMessage?.id
 
-    if (!container || history.messages.length === 0) return
+    if (!container || messages.length === 0) return
 
     const pendingOlderScroll = pendingOlderScrollRef.current
     if (pendingOlderScroll) {
-      const oldestChanged = history.messages[0]?.id !== pendingOlderScroll.oldestMessageId
-      if (!oldestChanged && history.isFetchingNextPage) return
+      const oldestChanged = messages[0]?.id !== pendingOlderScroll.oldestMessageId
+      if (!oldestChanged && view.isPrevLoading) return
       if (!oldestChanged) {
         pendingOlderScrollRef.current = null
         return
@@ -205,7 +200,7 @@ export function MessageList({
     const initialScroll = initialScrollRef.current
     if (!initialScroll.done) {
       if (initialScroll.targetMessageId != null) {
-        const targetMessage = history.messages.find((message) => message.id === initialScroll.targetMessageId)
+        const targetMessage = messages.find((message) => message.id === initialScroll.targetMessageId)
 
         const target = targetMessage
           ? container.querySelector<HTMLElement>(`[data-message-id="${targetMessage.id}"]`)
@@ -217,13 +212,13 @@ export function MessageList({
         return
       }
       if (initialScroll.hasUnread) {
-        const oldestMessage = history.messages[0]
-        if (oldestMessage.id > initialScroll.lastReadIngoing && history.hasNextPage) {
-          if (!history.isFetchingNextPage) void history.fetchNextPage()
+        const oldestMessage = messages[0]
+        if (oldestMessage.id > initialScroll.lastReadIngoing && view.canLoadPrev) {
+          if (!view.isPrevLoading) void view.loadPrev()
           return
         }
 
-        const firstUnread = history.messages.find((message) => (
+        const firstUnread = messages.find((message) => (
           !message.isOutgoing && message.id > initialScroll.lastReadIngoing
         ))
         const target = firstUnread
@@ -249,7 +244,7 @@ export function MessageList({
       nearBottomRef.current = true
       setShowScrollToLatest(false)
     }
-  }, [history.messages, history.hasNextPage, history.isFetchingNextPage])
+  }, [messages, view.canLoadPrev, view.isPrevLoading])
 
   return (
     <div class="relative min-h-0 flex-1">
@@ -263,23 +258,23 @@ export function MessageList({
         }}
       >
         <div class="mx-auto flex min-h-full max-w-3xl flex-col justify-end gap-4">
-        {history.hasNextPage && (
+        {view.canLoadPrev && (
           <div ref={olderSentinelRef} class="flex min-h-px justify-center">
-            {history.isFetchingNextPage && (
+            {view.isPrevLoading && (
               <span class="mb-4 rounded-full border border-base-300 bg-base-100 px-4 py-2 text-xs text-base-content">
                 Loading older messages…
               </span>
             )}
           </div>
         )}
-        {history.isPending && <p class="my-auto text-center text-sm text-muted">Loading messages…</p>}
-        {history.isError && <p class="my-auto text-center text-sm text-error">Failed to load messages.</p>}
-        {!history.isPending && !history.isError && history.messages.length === 0 && (
+        {view.isLoading && <p class="my-auto text-center text-sm text-muted">Loading messages…</p>}
+        {view.isError && <p class="my-auto text-center text-sm text-error">Failed to load messages.</p>}
+        {!view.isLoading && !view.isError && messages.length === 0 && (
           <p class="my-auto text-center text-sm text-muted">
             {pinned ? 'No pinned messages' : searchQuery != null ? 'No search results' : 'No messages'}
           </p>
         )}
-        {history.messages.map((message) => (
+        {messages.map((message) => (
           <article
             key={message.id}
             data-message-id={message.id}
@@ -373,9 +368,9 @@ export function MessageList({
             </div>
           </article>
         ))}
-        {targetMessageId != null && history.hasPreviousPage && (
+        {targetMessageId != null && view.canLoadNext && (
           <div ref={newerSentinelRef} class="flex min-h-px justify-center">
-            {history.isFetchingPreviousPage && (
+            {view.isNextLoading && (
               <span class="mt-4 rounded-full border border-base-300 bg-base-100 px-4 py-2 text-xs text-base-content">
                 Loading newer messages…
               </span>
