@@ -1,4 +1,4 @@
-import { Long, SearchFilters, Sticker, type Dialog, type StickerSet, type tl } from '@mtcute/web'
+import { InputMedia, Long, SearchFilters, Sticker, type Dialog, type Message, type StickerSet, type tl } from '@mtcute/web'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/preact-query'
 import { chunkForMessage } from './message-store'
 import { useTelegram, messageStoreKey } from './telegram-provider'
@@ -197,6 +197,57 @@ export function useSendText(peerId: string, threadId?: number) {
     onSuccess: (message) => {
       const store = messageStores.get(messageStoreKey(peerId, threadId))
       if (store) store.update(chunkForMessage(message))
+      void queryClient.invalidateQueries({ queryKey: telegramKeys.dialogs() })
+    },
+  })
+}
+
+export interface SendAttachmentsInput {
+  files: File[]
+  caption?: string
+  reply?: MessageReplyTarget
+  onFileSent?: (file: File, index: number) => void
+  onProgress?: (index: number, uploaded: number, total: number) => void
+}
+
+function attachmentMedia(file: File) {
+  const metadata = {
+    fileName: file.name,
+    fileMime: file.type || 'application/octet-stream',
+    fileSize: file.size,
+  }
+  return InputMedia.document(file, metadata)
+}
+
+export function useSendAttachments(peerId: string, threadId?: number) {
+  const { client, messageStores } = useTelegram()
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ files, caption, reply, onFileSent, onProgress }: SendAttachmentsInput) => {
+      const dialog = await resolveDialog(client!, queryClient, peerId)
+      const sent: Message[] = []
+
+      for (const [index, file] of files.entries()) {
+        const quote = index === 0 && reply?.quote
+          ? { text: reply.quote.text }
+          : undefined
+        const message = await client!.sendMedia(dialog.peer, attachmentMedia(file), {
+          caption: index === 0 ? caption?.trim() || undefined : undefined,
+          threadId,
+          replyTo: index === 0 ? reply?.message : undefined,
+          quote,
+          quoteOffset: quote ? reply!.quote!.start : undefined,
+          progressCallback: (uploaded, total) => onProgress?.(index, uploaded, total),
+        })
+        sent.push(message)
+        const store = messageStores.get(messageStoreKey(peerId, threadId))
+        if (store) store.update(chunkForMessage(message))
+        onFileSent?.(file, index)
+      }
+
+      return sent
+    },
+    onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: telegramKeys.dialogs() })
     },
   })
