@@ -186,6 +186,6 @@ export async function initializeMediaStreaming() {
     }
   } catch (error) {
     initialized = false
-    console.error('[Telefast] Failed to initialize media streaming', error)
+    console.error('Failed to initialize media streaming', error)
   }
 }

@@ -1,6 +1,6 @@
 import { createContext, type ComponentChildren } from 'preact'
 import { useContext, useEffect, useRef, useState } from 'preact/hooks'
-import type { Dialog, SentCode } from '@mtcute/web'
+import type { SentCode } from '@mtcute/web'
 import { QueryClient, QueryClientProvider } from '@tanstack/preact-query'
 import { useLocation } from 'preact-iso'
 import { createTelegramConnection, type TelefastClient } from '../telegram'
@@ -93,7 +93,7 @@ interface TelegramContextValue {
   reconnect(): Promise<void>
   clearError(): void
   setNotificationsEnabled(enabled: boolean): Promise<void>
-  markRead(peerId: string): Promise<void>
+  markRead(peerId: string, maxId: number): Promise<boolean>
   messageStores: Map<string, MessageStore>
 }
 
@@ -112,7 +112,7 @@ function errorText(error: unknown) {
 }
 
 function reportError(context: string, error: unknown) {
-  console.error(`[Telefast] ${context}`, error)
+  console.error(`${context}`, error)
   return errorText(error)
 }
 
@@ -181,10 +181,10 @@ export function TelegramProvider({ children, fallback }: { children: ComponentCh
 
   function attachUpdates(telegram: TelefastClient, accountQueryClient: QueryClient) {
     telegram.onConnectionState.add((state) => {
-      console.log('[Telefast] Telegram connection state:', state)
+      console.log('Telegram connection state:', state)
     })
     telegram.onError.add((error) => {
-      console.error('[Telefast] Telegram connection error:', error)
+      console.error('Telegram connection error:', error)
       if (error.message === 'Worker connection expired') {
         void recoverConnection(telegram)
       }
@@ -202,7 +202,7 @@ export function TelegramProvider({ children, fallback }: { children: ComponentCh
       }
       const target = cachedDialog(accountQueryClient, peerId)
 
-      console.log('[Telefast] notification check', {
+      console.log('notification check', {
         peerId,
         isCurrent,
         isOutgoing: message.isOutgoing,
@@ -250,7 +250,7 @@ export function TelegramProvider({ children, fallback }: { children: ComponentCh
     recoveringConnectionRef.current = true
     setStatus('loading')
     setMediaStreamClient(null)
-    console.log('[Telefast] Recreating expired Telegram worker connection')
+    console.log('Recreating expired Telegram worker connection')
     let replacement: Connection | null = null
 
     try {
@@ -267,7 +267,7 @@ export function TelegramProvider({ children, fallback }: { children: ComponentCh
 
       await enterChats(replacement)
       await queryClient().invalidateQueries({ queryKey: telegramKeys.all })
-      console.log('[Telefast] Telegram worker connection restored')
+      console.log('Telegram worker connection restored')
     } catch (recoveryError) {
       if (replacement) await replacement.destroy().catch(() => undefined)
       if (connectionRef.current === current || connectionRef.current === replacement) {
@@ -441,25 +441,22 @@ export function TelegramProvider({ children, fallback }: { children: ComponentCh
   }
 
 
-  async function markRead(peerId: string) {
+  async function markRead(peerId: string, maxId: number) {
     const telegram = connectionRef.current?.client
-    const dialog = cachedDialog(queryClient(), peerId)
-    if (!telegram || !dialog) return
-    const client = queryClient()
-    const dialogKey = telegramKeys.dialog(peerId)
-    const previous = { unreadCount: dialog.raw.unreadCount, unreadMark: dialog.raw.unreadMark }
-    dialog.raw.unreadCount = 0
-    dialog.raw.unreadMark = false
-    client.setQueryData<Dialog[]>(telegramKeys.dialogs(), (current) => current ? [...current] : current)
+    if (!telegram) return false
+
     try {
-      await telegram.readHistory(dialog.peer)
-      await client.invalidateQueries({ queryKey: telegramKeys.dialogs() })
-      await client.invalidateQueries({ queryKey: dialogKey })
+      console.log('readHistory', { peerId: Number(peerId), maxId })
+      await telegram.readHistory(Number(peerId), { maxId })
+      const client = queryClient()
+      await Promise.all([
+        client.invalidateQueries({ queryKey: telegramKeys.dialogs() }),
+        client.invalidateQueries({ queryKey: telegramKeys.dialog(peerId) }),
+      ])
+      return true
     } catch (error) {
-      dialog.raw.unreadCount = previous.unreadCount
-      dialog.raw.unreadMark = previous.unreadMark
-      client.setQueryData<Dialog[]>(telegramKeys.dialogs(), (current) => current ? [...current] : current)
-      console.error('[Telefast] Failed to mark chat as read', error)
+      console.error('Failed to mark chat as read', error)
+      return false
     }
   }
   async function setNotificationsEnabled(enabled: boolean) {
@@ -492,7 +489,7 @@ export function TelegramProvider({ children, fallback }: { children: ComponentCh
     try {
       await connection.client.logOut()
     } catch (logoutError) {
-      console.error('[Telefast] Failed to log out cleanly', logoutError)
+      console.error('Failed to log out cleanly', logoutError)
     } finally {
       await connection.destroy()
       connectionRef.current = null

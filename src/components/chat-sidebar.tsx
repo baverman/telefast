@@ -112,7 +112,7 @@ export function ChatSidebar({ selectedPeerId }: { selectedPeerId?: string }) {
                       onClick={(event) => {
                         event.preventDefault()
                         event.stopPropagation()
-                        void markRead(id)
+                        void markRead(id, dialog.lastMessage?.id ?? dialog.lastReadIngoing)
                       }}
                     >
                       {dialog.unreadCount}

@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks'
 import { useLocation } from 'preact-iso'
 import type { Dialog, Message } from '@mtcute/web'
+import type { TelefastClient } from '../telegram'
+import { useDebouncedCallback } from '../hooks/use-debounced-callback'
 import { useTelegram, isGroupPeer, messageStoreKey } from '../telegram/telegram-provider'
 import type { MessageReplyTarget } from '../telegram/queries'
 import { useMessageView } from '../telegram/message-view'
-import { Avatar, StickerView, timeLabel } from './media'
+import { Avatar, StickerView, timeLabel, useVisible } from './media'
 import { MessageContent } from './message-content'
 import { ReactionBar, MessageContextMenu } from './reaction-bar'
 import { MessageMetadata } from './message-metadata'
@@ -23,6 +25,124 @@ function selectedQuote(article: HTMLElement | null, message: Message): MessageRe
   const end = start + text.length
   if (!text || start < 0 || end > message.text.length) return undefined
   return { start, end, text }
+}
+
+
+function MessageArticle({
+  message,
+  peerId,
+  threadId,
+  targetMessageId,
+  client,
+  group,
+  menuOpen,
+  onVisible,
+  onOpenComments,
+  onOpenMenu,
+}: {
+  message: Message
+  peerId: string
+  threadId?: number
+  targetMessageId?: number
+  client: TelefastClient | null
+  group: boolean
+  menuOpen: boolean
+  onVisible: () => void
+  onOpenComments: (message: Message) => void
+  onOpenMenu: (message: Message, quote: MessageReplyTarget['quote'] | undefined, rect: DOMRect) => void
+}) {
+  const articleRef = useRef<HTMLElement | null>(null)
+  const readMarkerRef = useRef<HTMLSpanElement | null>(null)
+  const selectedQuoteRef = useRef<MessageReplyTarget['quote']>()
+  useVisible(readMarkerRef, '0px', onVisible)
+
+  return (
+    <article
+      ref={articleRef}
+      data-message-id={message.id}
+      class={`${message.isService
+        ? 'message-service'
+        : `group relative ${message.media?.type === 'sticker'
+            ? `sticker-message ${message.isOutgoing ? 'sticker-out' : 'sticker-in'}`
+            : `message-bubble ${message.isOutgoing ? 'message-out' : 'message-in'}`}`
+      }${message.id === targetMessageId ? ' target-message' : ''}`}
+    >
+      {group && !message.isService && (
+        <a
+          href={`/chat/${encodeURIComponent(String(message.sender.id))}/info`}
+          class={`absolute top-0 ${message.isOutgoing ? '-right-11' : '-left-11'}`}
+          title={`Open information about ${message.sender.displayName}`}
+          aria-label={`Open information about ${message.sender.displayName}`}
+        >
+          <Avatar
+            peer={message.sender}
+            telegram={client}
+            className="grid size-8 place-items-center rounded-full bg-gradient-to-br from-sky-500 to-indigo-500 text-[10px] font-semibold text-primary-content"
+          />
+        </a>
+      )}
+      {!message.isService && (
+        <button
+          type="button"
+          class={`absolute right-1 top-1 z-10 grid size-6 place-items-center rounded-full border border-base-300 bg-base-100 text-muted shadow-md transition focus:opacity-100 ${
+            menuOpen
+              ? 'opacity-100'
+              : 'pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100'
+          }`}
+          aria-label="Message actions"
+          aria-expanded={menuOpen}
+          onMouseDown={() => {
+            selectedQuoteRef.current = selectedQuote(articleRef.current, message)
+          }}
+          onClick={(event) => {
+            onOpenMenu(message, selectedQuoteRef.current, event.currentTarget.getBoundingClientRect())
+            selectedQuoteRef.current = undefined
+          }}
+        >
+          <svg aria-hidden="true" viewBox="0 0 20 20" class="size-4" fill="currentColor">
+            <circle cx="4" cy="10" r="1.5" />
+            <circle cx="10" cy="10" r="1.5" />
+            <circle cx="16" cy="10" r="1.5" />
+          </svg>
+        </button>
+      )}
+      {group && !message.isOutgoing && (
+        <a
+          href={`/chat/${encodeURIComponent(String(message.sender.id))}/info`}
+          class="mb-1 block w-fit text-xs font-medium text-primary underline-offset-2 hover:underline"
+          title={`Open information about ${message.sender.displayName}`}
+        >
+          {message.sender.displayName}
+        </a>
+      )}
+      {!message.isService && <MessageMetadata message={message} telegram={client} />}
+      {message.media?.type === 'sticker' ? (
+        <StickerView sticker={message.media} telegram={client} />
+      ) : (
+        <MessageContent message={message} telegram={client} />
+      )}
+      <div class="mt-1 flex flex-wrap items-center gap-1">
+        {message.replies?.hasComments && message.replies.discussion != null && (
+          <button
+            type="button"
+            class="inline-flex items-center gap-1 rounded-full bg-base-100 px-2 py-0.5 text-[11px] text-muted"
+            onClick={() => onOpenComments(message)}
+          >
+            💬 {message.replies.count > 0 ? message.replies.count : 'Comments'}
+          </button>
+        )}
+        {!message.isService && <ReactionBar message={message} peerId={peerId} threadId={threadId} />}
+        <time
+          class="ml-auto text-[10px] text-muted"
+          dateTime={message.date.toISOString()}
+          title={message.date.toLocaleString(undefined, { dateStyle: 'full', timeStyle: 'long' })}
+        >
+          {timeLabel(message.date)}
+        </time>
+      </div>
+      <span ref={readMarkerRef} class="block h-px w-full" aria-hidden="true" />
+    </article>
+  )
 }
 
 export function MessageList({
@@ -46,13 +166,22 @@ export function MessageList({
   onReply: (reply: MessageReplyTarget) => void
   onEdit: (message: Message) => void
 }) {
-  const { client } = useTelegram()
+  const { client, markRead } = useTelegram()
   const location = useLocation()
+  const readStateRef = useRef({
+    applies: threadId == null && !pinned && searchQuery == null && targetMessageId == null,
+    boundary: dialog.lastReadIngoing,
+    viewAnchor: targetMessageId ?? (
+      threadId == null && !pinned && searchQuery == null && targetMessageId == null && dialog.lastReadIngoing > 0
+        ? dialog.lastReadIngoing
+        : undefined
+    ),
+  })
+  const { applies: readStateApplies, boundary, viewAnchor } = readStateRef.current
   const usingStore = !pinned && searchQuery == null
-  const anchorId = usingStore ? targetMessageId : undefined
   const view = useMessageView(peerId, {
     threadId,
-    anchorId,
+    anchorId: usingStore ? viewAnchor : undefined,
     search: searchQuery,
     isPinned: pinned,
     cacheKey: usingStore ? messageStoreKey(peerId, threadId) : undefined,
@@ -63,6 +192,8 @@ export function MessageList({
   const newerSentinelRef = useRef<HTMLDivElement | null>(null)
   const previousLatestIdRef = useRef<number>()
   const nearBottomRef = useRef(true)
+  const maxVisibleIncomingIdRef = useRef(0)
+  const lastReportedReadIdRef = useRef(boundary)
   const pendingOlderScrollRef = useRef<{
     messageId?: string
     oldestMessageId?: number
@@ -70,7 +201,6 @@ export function MessageList({
     scrollHeight: number
     scrollTop: number
   } | null>(null)
-  const selectedQuoteRef = useRef<MessageReplyTarget['quote']>()
   const [reactionMenu, setReactionMenu] = useState<{
     message: Message
     quote?: MessageReplyTarget['quote']
@@ -80,11 +210,31 @@ export function MessageList({
   } | null>(null)
   const [showScrollToLatest, setShowScrollToLatest] = useState(false)
   const initialScrollRef = useRef({
-    lastReadIngoing: dialog.lastReadIngoing,
-    hasUnread: !pinned && searchQuery == null && threadId == null && dialog.unreadCount > 0,
+    boundary,
+    readStateApplies,
     targetMessageId,
     done: false,
   })
+
+  const { callback: scheduleReadReport } = useDebouncedCallback(() => {
+    const id = maxVisibleIncomingIdRef.current
+    if (id <= lastReportedReadIdRef.current) return
+
+    const previousId = lastReportedReadIdRef.current
+    lastReportedReadIdRef.current = id
+    void markRead(peerId, id).then((success) => {
+      if (success || lastReportedReadIdRef.current !== id) return
+      lastReportedReadIdRef.current = previousId
+      if (maxVisibleIncomingIdRef.current > lastReportedReadIdRef.current) scheduleReadReport()
+    })
+  }, 1000)
+
+  function reportVisible(message: Message) {
+    if (!readStateApplies || message.isOutgoing || message.isService) return
+    if (document.visibilityState !== 'visible' || !document.hasFocus()) return
+    maxVisibleIncomingIdRef.current = Math.max(maxVisibleIncomingIdRef.current, message.id)
+    if (maxVisibleIncomingIdRef.current > lastReportedReadIdRef.current) scheduleReadReport()
+  }
 
   async function openComments(post: Message) {
     if (!client) return
@@ -93,7 +243,7 @@ export function MessageList({
       if (!discussion) return
       location.route(`/chat/${String(discussion.chat.id)}?thread=${discussion.id}`)
     } catch (error) {
-      console.error('[Telefast] Failed to open comments', error)
+      console.error('Failed to open comments', error)
     }
   }
 
@@ -132,9 +282,9 @@ export function MessageList({
   }, [view.loadPrev, view.canLoadPrev, view.isPrevLoading, messages])
 
   const loadNewer = useCallback(() => {
-    if (!targetMessageId || !view.canLoadNext || view.isNextLoading) return
+    if (viewAnchor == null || !view.canLoadNext || view.isNextLoading) return
     void view.loadNext()
-  }, [view.loadNext, view.canLoadNext, view.isNextLoading, targetMessageId])
+  }, [view.loadNext, view.canLoadNext, view.isNextLoading, viewAnchor])
 
   useEffect(() => {
     const container = containerRef.current
@@ -152,7 +302,7 @@ export function MessageList({
   useEffect(() => {
     const container = containerRef.current
     const sentinel = newerSentinelRef.current
-    if (!container || !sentinel || !view.canLoadNext) return
+    if (viewAnchor == null || !container || !sentinel || !view.canLoadNext) return
 
     const observer = new IntersectionObserver((entries) => {
       if (entries.some((entry) => entry.isIntersecting)) loadNewer()
@@ -201,34 +351,24 @@ export function MessageList({
     if (!initialScroll.done) {
       if (initialScroll.targetMessageId != null) {
         const targetMessage = messages.find((message) => message.id === initialScroll.targetMessageId)
-
         const target = targetMessage
           ? container.querySelector<HTMLElement>(`[data-message-id="${targetMessage.id}"]`)
           : null
         if (target) target.scrollIntoView({ block: 'center' })
         else container.scrollTop = container.scrollHeight
-        initialScroll.done = true
-        updateNearBottom(container)
-        return
-      }
-      if (initialScroll.hasUnread) {
-        const oldestMessage = messages[0]
-        if (oldestMessage.id > initialScroll.lastReadIngoing && view.canLoadPrev) {
-          if (!view.isPrevLoading) void view.loadPrev()
-          return
-        }
-
+      } else if (initialScroll.readStateApplies) {
         const firstUnread = messages.find((message) => (
-          !message.isOutgoing && message.id > initialScroll.lastReadIngoing
+          !message.isOutgoing && !message.isService && message.id > initialScroll.boundary
         ))
         const target = firstUnread
           ? container.querySelector<HTMLElement>(`[data-message-id="${firstUnread.id}"]`)
           : null
-        if (target) target.scrollIntoView({ block: 'start' })
+        if (target) target.scrollIntoView({ block: 'end' })
         else container.scrollTop = container.scrollHeight
       } else {
         container.scrollTop = container.scrollHeight
       }
+
       initialScroll.done = true
       updateNearBottom(container)
       return
@@ -275,100 +415,30 @@ export function MessageList({
           </p>
         )}
         {messages.map((message) => (
-          <article
+          <MessageArticle
             key={message.id}
-            data-message-id={message.id}
-            class={`${message.isService
-              ? 'message-service'
-              : `group relative ${message.media?.type === 'sticker'
-                  ? `sticker-message ${message.isOutgoing ? 'sticker-out' : 'sticker-in'}`
-                  : `message-bubble ${message.isOutgoing ? 'message-out' : 'message-in'}`}`
-            }${message.id === targetMessageId ? ' target-message' : ''}`}
-          >
-            {isGroupPeer(dialog.peer) && !message.isService && (
-              <a
-                href={`/chat/${encodeURIComponent(String(message.sender.id))}/info`}
-                class={`absolute top-0 ${message.isOutgoing ? '-right-11' : '-left-11'}`}
-                title={`Open information about ${message.sender.displayName}`}
-                aria-label={`Open information about ${message.sender.displayName}`}
-              >
-                <Avatar
-                  peer={message.sender}
-                  telegram={client}
-                  className="grid size-8 place-items-center rounded-full bg-gradient-to-br from-sky-500 to-indigo-500 text-[10px] font-semibold text-primary-content"
-                />
-              </a>
-            )}
-            {!message.isService && (
-              <button
-                type="button"
-                class={`absolute right-1 top-1 z-10 grid size-6 place-items-center rounded-full border border-base-300 bg-base-100 text-muted shadow-md transition focus:opacity-100 ${
-                  reactionMenu?.message.id === message.id
-                    ? 'opacity-100'
-                    : 'pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100'
-                }`}
-                aria-label="Message actions"
-                aria-expanded={reactionMenu?.message.id === message.id}
-                onMouseDown={(event) => {
-                  selectedQuoteRef.current = selectedQuote(event.currentTarget.closest('article'), message)
-                }}
-                onClick={(event) => {
-                  const rect = event.currentTarget.getBoundingClientRect()
-                  const placement = rect.top >= 240 ? 'above' : 'below'
-                  setReactionMenu({
-                    message,
-                    quote: selectedQuoteRef.current,
-                    x: Math.min(Math.max(rect.left + rect.width / 2, 124), window.innerWidth - 124),
-                    y: placement === 'above' ? rect.top - 4 : rect.bottom + 4,
-                    placement,
-                  })
-                  selectedQuoteRef.current = undefined
-                }}
-              >
-                <svg aria-hidden="true" viewBox="0 0 20 20" class="size-4" fill="currentColor">
-                  <circle cx="4" cy="10" r="1.5" />
-                  <circle cx="10" cy="10" r="1.5" />
-                  <circle cx="16" cy="10" r="1.5" />
-                </svg>
-              </button>
-            )}
-            {isGroupPeer(dialog.peer) && !message.isOutgoing && (
-              <a
-                href={`/chat/${encodeURIComponent(String(message.sender.id))}/info`}
-                class="mb-1 block w-fit text-xs font-medium text-primary underline-offset-2 hover:underline"
-                title={`Open information about ${message.sender.displayName}`}
-              >
-                {message.sender.displayName}
-              </a>
-            )}
-            {!message.isService && <MessageMetadata message={message} telegram={client} />}
-            {message.media?.type === 'sticker' ? (
-              <StickerView sticker={message.media} telegram={client} />
-            ) : (
-              <MessageContent message={message} telegram={client} />
-            )}
-            <div class="mt-1 flex flex-wrap items-center gap-1">
-              {message.replies?.hasComments && message.replies.discussion != null && (
-                <button
-                  type="button"
-                  class="inline-flex items-center gap-1 rounded-full bg-base-100 px-2 py-0.5 text-[11px] text-muted"
-                  onClick={() => void openComments(message)}
-                >
-                  💬 {message.replies.count > 0 ? message.replies.count : 'Comments'}
-                </button>
-              )}
-              {!message.isService && <ReactionBar message={message} peerId={peerId} threadId={threadId} />}
-              <time
-                class="ml-auto text-[10px] text-muted"
-                dateTime={message.date.toISOString()}
-                title={message.date.toLocaleString(undefined, { dateStyle: 'full', timeStyle: 'long' })}
-              >
-                {timeLabel(message.date)}
-              </time>
-            </div>
-          </article>
+            message={message}
+            peerId={peerId}
+            threadId={threadId}
+            targetMessageId={targetMessageId}
+            client={client}
+            group={isGroupPeer(dialog.peer)}
+            menuOpen={reactionMenu?.message.id === message.id}
+            onVisible={() => reportVisible(message)}
+            onOpenComments={(target) => void openComments(target)}
+            onOpenMenu={(target, quote, rect) => {
+              const placement = rect.top >= 240 ? 'above' : 'below'
+              setReactionMenu({
+                message: target,
+                quote,
+                x: Math.min(Math.max(rect.left + rect.width / 2, 124), window.innerWidth - 124),
+                y: placement === 'above' ? rect.top - 4 : rect.bottom + 4,
+                placement,
+              })
+            }}
+          />
         ))}
-        {targetMessageId != null && view.canLoadNext && (
+        {viewAnchor != null && view.canLoadNext && (
           <div ref={newerSentinelRef} class="flex min-h-px justify-center">
             {view.isNextLoading && (
               <span class="mt-4 rounded-full border border-base-300 bg-base-100 px-4 py-2 text-xs text-base-content">

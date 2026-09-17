@@ -103,8 +103,11 @@ export function MessageText({ message }: { message: Message }) {
   return <>{parts}</>
 }
 
-export function useVisible(ref: RefObject<Element>, rootMargin: string) {
+export function useVisible(ref: RefObject<Element>, rootMargin: string, onVisible?: () => void) {
   const [visible, setVisible] = useState(typeof IntersectionObserver === 'undefined')
+  const onVisibleRef = useRef(onVisible)
+  onVisibleRef.current = onVisible
+
   useEffect(() => {
     if (visible) return
     const host = ref.current
@@ -115,6 +118,7 @@ export function useVisible(ref: RefObject<Element>, rootMargin: string) {
     const observer = new IntersectionObserver((entries) => {
       if (!entries.some((entry) => entry.isIntersecting)) return
       setVisible(true)
+      onVisibleRef.current?.()
       observer.disconnect()
     }, { rootMargin })
     observer.observe(host)
@@ -228,7 +232,7 @@ export function StickerView({
              })
              lottieRef.current = animation
              if (shouldPlayRef.current) animation.play()
-           })().catch((error) => console.warn('[Telefast] Failed to render sticker', error))
+           })().catch((error) => console.warn('Failed to render sticker', error))
            return () => {
              active = false
              lottieRef.current?.destroy()

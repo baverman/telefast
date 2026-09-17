@@ -3,6 +3,8 @@
 * Mute settings
 * Archive/delete chat
 * Type now indicator
+* copy image
+* attach file
 
 # Bugs
 
@@ -11,3 +13,4 @@
 * switch doesn't invalidate cache
 * Sometimes media url handler stack in loop
 * Sticker viewer doesn't show sticker keywords
+* Invalid URI. Load of media resource  failed.

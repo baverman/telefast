@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks'
 import type { Message } from '@mtcute/web'
 import { useBotCommands, useEditMessage, useSendText, type MessageReplyTarget } from '../telegram/queries'
-import { useMessageView } from '../telegram/message-view'
-import { messageStoreKey } from '../telegram/telegram-provider'
+import { getChainMessages } from '../telegram/message-store'
+import { messageStoreKey, useTelegram } from '../telegram/telegram-provider'
 import { StickerPicker } from './sticker-picker'
 
 export function MessageComposer({
@@ -23,8 +23,7 @@ export function MessageComposer({
   const sendText = useSendText(peerId, threadId)
   const editMessage = useEditMessage(peerId, threadId)
   const commandsQuery = useBotCommands(peerId)
-  const view = useMessageView(peerId, { threadId, cacheKey: messageStoreKey(peerId, threadId) })
-  const messages = view.chain()
+  const { messageStores } = useTelegram()
   const [drafts, setDrafts] = useState<Record<string, string>>({})
   const draft = drafts[peerId] ?? ''
   const setDraft = (value: string) => setDrafts((current) => ({ ...current, [peerId]: value }))
@@ -34,6 +33,7 @@ export function MessageComposer({
   const [pickerOpen, setPickerOpen] = useState(false)
   const [activeIndex, setActiveIndex] = useState(0)
   const [hiddenQuery, setHiddenQuery] = useState<string | null>(null)
+
 
   useEffect(() => {
     setPickerOpen(false)
@@ -73,19 +73,12 @@ export function MessageComposer({
 
   const commands = useMemo(() => {
     const map = new Map<string, { name: string; description: string }>()
-    for (const message of messages) {
-      for (const entity of message.entities) {
-        if (entity.is('bot_command') && !map.has(entity.text)) {
-          map.set(entity.text, { name: entity.text, description: '' })
-        }
-      }
-    }
     for (const command of commandsQuery.data ?? []) {
       const name = `/${command.name}`
       map.set(name, { name, description: command.description })
     }
     return [...map.values()].sort((left, right) => left.name.localeCompare(right.name))
-  }, [commandsQuery.data, messages])
+  }, [commandsQuery.data])
 
   const input = draft.trimStart()
   const showMenu = input.startsWith('/') && hiddenQuery !== input
@@ -183,6 +176,8 @@ export function MessageComposer({
           onInput={(event) => setDraft(event.currentTarget.value)}
           onKeyDown={(event) => {
             if (event.key === 'ArrowUp' && !draft && !reply && !edit) {
+              const chain = messageStores.get(messageStoreKey(peerId, threadId))?.chain()
+              const messages = chain ? getChainMessages(chain.head) : []
               const lastOutgoing = [...messages].reverse().find((message) => message.isOutgoing && Boolean(message.text))
               if (lastOutgoing) {
                 event.preventDefault()

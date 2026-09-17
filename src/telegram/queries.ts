@@ -58,12 +58,14 @@ export function usePinnedMessageCount(peerId: string, threadId?: number) {
   return useQuery({
     queryKey: telegramKeys.pinnedMessages(peerId, threadId),
     queryFn: async () => {
-      const result = await client!.searchMessages({
+      const options = {
         chatId: Number(peerId),
         threadId,
         filter: SearchFilters.Pinned,
         limit: 1,
-      })
+      }
+      console.log('Pinned message count searchMessages', options)
+      const result = await client!.searchMessages(options)
       if ('total' in result && typeof result.total === 'number') return result.total
       return [...result].length
     },

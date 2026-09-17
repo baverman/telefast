@@ -105,7 +105,7 @@ export class MessageViewImpl implements MessageView {
   private async fetchPage(params: PageRequest): Promise<Message[]> {
     const client = this.client
     if (!client) throw new Error('Telegram connection is not ready')
-    const result = await client.searchMessages({
+    const options = {
       chatId: Number(this.peerId),
       threadId: this.threadId,
       limit: params.around ? AROUND_PAGE_LIMIT : DEFAULT_PAGE_LIMIT,
@@ -113,7 +113,9 @@ export class MessageViewImpl implements MessageView {
       ...(this.isPinned ? { filter: SearchFilters.Pinned } : {}),
       ...(params.offset != null ? { offset: params.offset } : {}),
       ...(params.addOffset != null ? { addOffset: params.addOffset } : {}),
-    })
+    }
+    console.log('Message view searchMessages', options)
+    const result = await client.searchMessages(options)
     return [...result]
   }
 

@@ -121,7 +121,7 @@ export function openBlobCache(accountId: string): BlobCache {
       const now = Date.now()
       if (now - lastCleanup >= CLEANUP_INTERVAL) {
         lastCleanup = now
-        void removeExpired().catch((error) => console.error('[Telefast] Failed to clean blob cache', error))
+        void removeExpired().catch((error) => console.error('Failed to clean blob cache', error))
       }
     },
 
