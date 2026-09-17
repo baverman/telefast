@@ -216,6 +216,7 @@ export function MessageList({
     done: false,
   })
 
+
   const { callback: scheduleReadReport } = useDebouncedCallback(() => {
     const id = maxVisibleIncomingIdRef.current
     if (id <= lastReportedReadIdRef.current) return
@@ -253,6 +254,7 @@ export function MessageList({
     setShowScrollToLatest(!nearBottom)
     return nearBottom
   }
+
 
   const loadOlder = useCallback(() => {
     const container = containerRef.current
@@ -354,8 +356,11 @@ export function MessageList({
         const target = targetMessage
           ? container.querySelector<HTMLElement>(`[data-message-id="${targetMessage.id}"]`)
           : null
-        if (target) target.scrollIntoView({ block: 'center' })
-        else container.scrollTop = container.scrollHeight
+        if (target && targetMessage) {
+          target.scrollIntoView({ block: 'center' })
+        } else {
+          container.scrollTop = container.scrollHeight
+        }
       } else if (initialScroll.readStateApplies) {
         const firstUnread = messages.find((message) => (
           !message.isOutgoing && !message.isService && message.id > initialScroll.boundary
@@ -363,8 +368,11 @@ export function MessageList({
         const target = firstUnread
           ? container.querySelector<HTMLElement>(`[data-message-id="${firstUnread.id}"]`)
           : null
-        if (target) target.scrollIntoView({ block: 'end' })
-        else container.scrollTop = container.scrollHeight
+        if (target && firstUnread) {
+          target.scrollIntoView({ block: 'end' })
+        } else {
+          container.scrollTop = container.scrollHeight
+        }
       } else {
         container.scrollTop = container.scrollHeight
       }
@@ -398,16 +406,7 @@ export function MessageList({
         }}
       >
         <div class="mx-auto flex min-h-full max-w-3xl flex-col justify-end gap-4">
-        {view.canLoadPrev && (
-          <div ref={olderSentinelRef} class="flex min-h-px justify-center">
-            {view.isPrevLoading && (
-              <span class="mb-4 rounded-full border border-base-300 bg-base-100 px-4 py-2 text-xs text-base-content">
-                Loading older messages…
-              </span>
-            )}
-          </div>
-        )}
-        {view.isLoading && <p class="my-auto text-center text-sm text-muted">Loading messages…</p>}
+        {view.canLoadPrev && <div ref={olderSentinelRef} class="min-h-px" />}
         {view.isError && <p class="my-auto text-center text-sm text-error">Failed to load messages.</p>}
         {!view.isLoading && !view.isError && messages.length === 0 && (
           <p class="my-auto text-center text-sm text-muted">
@@ -438,15 +437,7 @@ export function MessageList({
             }}
           />
         ))}
-        {viewAnchor != null && view.canLoadNext && (
-          <div ref={newerSentinelRef} class="flex min-h-px justify-center">
-            {view.isNextLoading && (
-              <span class="mt-4 rounded-full border border-base-300 bg-base-100 px-4 py-2 text-xs text-base-content">
-                Loading newer messages…
-              </span>
-            )}
-          </div>
-        )}
+        {viewAnchor != null && <div ref={newerSentinelRef} class="min-h-px" />}
         {reactionMenu && (
           <MessageContextMenu
             message={reactionMenu.message}
@@ -472,6 +463,23 @@ export function MessageList({
         )}
         </div>
       </div>
+      {view.isLoading && (
+        <div class="pointer-events-none absolute inset-0 z-20 grid place-items-center">
+          <span class="rounded-full border border-base-300 bg-base-100/90 px-4 py-2 text-sm text-muted shadow-lg backdrop-blur">
+            Loading messages…
+          </span>
+        </div>
+      )}
+      {view.isPrevLoading && (
+        <div class="pointer-events-none absolute left-1/2 top-3 z-20 -translate-x-1/2 rounded-full border border-base-300 bg-base-100/90 px-4 py-2 text-xs text-base-content shadow-lg backdrop-blur">
+          Loading older messages…
+        </div>
+      )}
+      {view.isNextLoading && (
+        <div class="pointer-events-none absolute bottom-3 left-1/2 z-20 -translate-x-1/2 rounded-full border border-base-300 bg-base-100/90 px-4 py-2 text-xs text-base-content shadow-lg backdrop-blur">
+          Loading newer messages…
+        </div>
+      )}
       {showScrollToLatest && (
         <button
           type="button"
