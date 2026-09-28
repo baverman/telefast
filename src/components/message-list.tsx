@@ -201,6 +201,7 @@ export function MessageList({
     scrollHeight: number
     scrollTop: number
   } | null>(null)
+  const pendingNewerPageTailRef = useRef<number | null>(null)
   const [reactionMenu, setReactionMenu] = useState<{
     message: Message
     quote?: MessageReplyTarget['quote']
@@ -285,8 +286,17 @@ export function MessageList({
 
   const loadNewer = useCallback(() => {
     if (viewAnchor == null || !view.canLoadNext || view.isNextLoading) return
-    void view.loadNext()
-  }, [view.loadNext, view.canLoadNext, view.isNextLoading, viewAnchor])
+
+    const tailId = view.chain().at(-1)?.id
+    if (tailId == null) return
+
+    pendingNewerPageTailRef.current = tailId
+    void view.loadNext().finally(() => {
+      if (pendingNewerPageTailRef.current === tailId && view.chain().at(-1)?.id === tailId) {
+        pendingNewerPageTailRef.current = null
+      }
+    })
+  }, [view, viewAnchor])
 
   useEffect(() => {
     const container = containerRef.current
@@ -378,6 +388,13 @@ export function MessageList({
       }
 
       initialScroll.done = true
+      updateNearBottom(container)
+      return
+    }
+
+    const appendedByNewerPage = latestChanged && pendingNewerPageTailRef.current === previousLatestId
+    if (appendedByNewerPage) {
+      pendingNewerPageTailRef.current = null
       updateNearBottom(container)
       return
     }

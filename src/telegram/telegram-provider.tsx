@@ -45,6 +45,7 @@ function createAccountResources(accountId: string): AccountResources {
     const key = event.query.queryKey
     if (key[0] !== 'telegram' || key[1] !== 'media-url') return
     const url = event.query.state.data
+    console.log('QC revoke', url)
     if (typeof url === 'string') URL.revokeObjectURL(url)
   })
   return { accountId, blobCache: openBlobCache(accountId), queryClient, unsubscribeQueryCache }
