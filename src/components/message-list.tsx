@@ -172,7 +172,7 @@ export function MessageList({
     applies: threadId == null && !pinned && searchQuery == null && targetMessageId == null,
     boundary: dialog.lastReadIngoing,
     viewAnchor: targetMessageId ?? (
-      threadId == null && !pinned && searchQuery == null && targetMessageId == null && dialog.lastReadIngoing > 0
+      threadId == null && !pinned && searchQuery == null && targetMessageId == null && dialog.unreadCount > 0 && dialog.lastReadIngoing > 0
         ? dialog.lastReadIngoing
         : undefined
     ),
