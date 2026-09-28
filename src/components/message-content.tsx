@@ -310,6 +310,42 @@ function ContactView({ message }: { message: Message }) {
 }
 
 
+function WebPageView({ message, telegram }: { message: Message; telegram: TelefastClient | null }) {
+  const webpage = message.media as Extract<NonNullable<Message['media']>, { type: 'webpage' }>
+  const preview = webpage.preview
+  const hostRef = useRef<HTMLAnchorElement | null>(null)
+  const visible = useVisible(hostRef, '240px')
+  const photo = preview.photo
+  const source = photo?.getThumbnail('m') ?? photo?.getThumbnail('s') ?? photo ?? undefined
+  const image = useMediaUrl(
+    telegram,
+    `webpage-${source?.uniqueFileId ?? message.id}`,
+    source,
+    'image/jpeg',
+    visible,
+  )
+
+  return (
+    <a
+      ref={hostRef}
+      href={preview.url}
+      target="_blank"
+      rel="noopener noreferrer"
+      class="block max-w-sm overflow-hidden rounded-lg border border-base-300 bg-base-200/40 text-base-content no-underline"
+    >
+      {image.data && <img class="max-h-48 w-full object-cover" src={image.data} alt="" decoding="async" />}
+      <span class="block px-3 py-2">
+        <span class="block truncate text-xs text-primary">{preview.siteName || preview.displayUrl}</span>
+        {preview.title && <strong class="mt-0.5 block text-sm">{preview.title}</strong>}
+        {(preview.description || preview.author) && (
+          <span class="mt-1 block text-xs text-muted">{preview.description || preview.author}</span>
+        )}
+      </span>
+    </a>
+  )
+}
+
+
 function UnsupportedMedia({ message }: { message: Message }) {
   const media = message.media
 
@@ -332,6 +368,7 @@ function MediaBlock({ message, telegram }: { message: Message; telegram: Telefas
     case 'audio': return <AudioView message={message} telegram={telegram} />
     case 'voice': return <VoiceView message={message} telegram={telegram} />
     case 'contact': return <ContactView message={message} />
+    case 'webpage': return <WebPageView message={message} telegram={telegram} />
     default: return message.media ? <UnsupportedMedia message={message} /> : null
   }
 }

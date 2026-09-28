@@ -51,11 +51,6 @@ function createAccountResources(accountId: string): AccountResources {
   return { accountId, blobCache: openBlobCache(accountId), queryClient, unsubscribeQueryCache }
 }
 
-function discardAccountResources(resources: AccountResources) {
-  resources.queryClient.clear()
-  resources.unsubscribeQueryCache()
-}
-
 async function withConnectionTimeout<T>(operation: Promise<T>) {
   let timeout: ReturnType<typeof setTimeout> | undefined
   try {
@@ -321,7 +316,6 @@ export function TelegramProvider({ children, fallback }: { children: ComponentCh
     const accountId = String((await connection.client.getMe()).id)
     let accountResources = resourcesRef.current
     if (!accountResources || accountResources.accountId !== accountId) {
-      if (accountResources) discardAccountResources(accountResources)
       storesRef.current.clear()
       accountResources = createAccountResources(accountId)
       resourcesRef.current = accountResources
@@ -517,7 +511,6 @@ export function TelegramProvider({ children, fallback }: { children: ComponentCh
       await connection.destroy()
       connectionRef.current = null
       const currentResources = resourcesRef.current
-      if (currentResources) discardAccountResources(currentResources)
       storesRef.current.clear()
       resourcesRef.current = null
       setResources(null)
