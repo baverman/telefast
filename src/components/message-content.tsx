@@ -309,6 +309,21 @@ function ContactView({ message }: { message: Message }) {
   )
 }
 
+
+function UnsupportedMedia({ message }: { message: Message }) {
+  const media = message.media
+
+  useEffect(() => {
+    console.warn('Unsupported message media', { messageId: message.id, media })
+  }, [message.id, media])
+
+  return (
+    <div class="rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-sm text-base-content">
+      Unsupported message media: <code>{media?.type ?? 'unknown'}</code>
+    </div>
+  )
+}
+
 function MediaBlock({ message, telegram }: { message: Message; telegram: TelefastClient | null }) {
   switch (message.media?.type) {
     case 'photo': return <PhotoView message={message} telegram={telegram} />
@@ -317,7 +332,7 @@ function MediaBlock({ message, telegram }: { message: Message; telegram: Telefas
     case 'audio': return <AudioView message={message} telegram={telegram} />
     case 'voice': return <VoiceView message={message} telegram={telegram} />
     case 'contact': return <ContactView message={message} />
-    default: return null
+    default: return message.media ? <UnsupportedMedia message={message} /> : null
   }
 }
 
