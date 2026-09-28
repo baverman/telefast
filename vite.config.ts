@@ -3,6 +3,9 @@ import preact from '@preact/preset-vite'
 import tailwindcss from '@tailwindcss/vite'
 export default defineConfig({
   plugins: [preact(), tailwindcss()],
+  build: {
+    chunkSizeWarningLimit: 2000,
+  },
   resolve: {
     dedupe: ['preact', 'preact/hooks'],
   },
