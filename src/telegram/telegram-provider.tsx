@@ -234,6 +234,28 @@ export function TelegramProvider({ children, fallback }: { children: ComponentCh
       }
       void accountQueryClient.invalidateQueries({ queryKey: telegramKeys.dialogs() })
     })
+
+    telegram.onDeleteMessage.add((update) => {
+      if (update.channelId != null) {
+        const peerId = String(update.channelId)
+        for (const [key, store] of storesRef.current) {
+          if (key !== peerId && !key.startsWith(`${peerId}:`)) continue
+          update.messageIds.forEach((messageId) => store.remove(messageId))
+        }
+      } else {
+        for (const store of storesRef.current.values()) {
+          update.messageIds.forEach((messageId) => {
+            const message = store.chunks
+              .flatMap((chunk) => chunk.messages)
+              .find((item) => item.id === messageId)
+            const isChannelMessage = message?.chat.type === 'chat' && message.chat.chatType !== 'group'
+            if (message && !isChannelMessage) store.remove(messageId)
+          })
+        }
+      }
+
+      void accountQueryClient.invalidateQueries({ queryKey: telegramKeys.dialogs() })
+    })
   }
 
   async function recoverConnection(failedClient: TelefastClient) {
