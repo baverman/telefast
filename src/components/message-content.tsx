@@ -102,7 +102,7 @@ function VideoView({ message, telegram }: { message: Message; telegram: Telefast
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const [hovered, setHovered] = useState(false)
   const visible = useVisible(hostRef, '240px')
-  const posterThumb = video.getThumbnail('m') ?? video.getThumbnail('s')
+  const posterThumb = video.getThumbnail('x') ?? video.getThumbnail('m') ?? video.getThumbnail('s')
   const poster = useMediaUrl(
     telegram,
     `poster-${video.uniqueFileId}`,
@@ -179,7 +179,7 @@ function DocumentView({ message, telegram }: { message: Message; telegram: Telef
   const image = isImageDocument(document)
   const video = isVideoDocument(document)
   const thumbnail = image || video
-    ? document.getThumbnail('m') ?? document.getThumbnail('s') ?? document.thumbnails[0]
+    ? document.getThumbnail('x') ?? document.getThumbnail('m') ?? document.getThumbnail('s') ?? document.thumbnails[0]
     : undefined
   const media = useMediaUrl(
     telegram,
@@ -316,7 +316,10 @@ function WebPageView({ message, telegram }: { message: Message; telegram: Telefa
   const hostRef = useRef<HTMLAnchorElement | null>(null)
   const visible = useVisible(hostRef, '240px')
   const photo = preview.photo
-  const source = photo?.getThumbnail('m') ?? photo?.getThumbnail('s') ?? photo ?? undefined
+  const source = photo?.getThumbnail('x') ?? photo?.getThumbnail('m') ?? photo?.getThumbnail('s') ?? photo ?? undefined
+  const imageAspectRatio = source && source.width > 0 && source.height > 0
+    ? source.width / source.height
+    : undefined
   const image = useMediaUrl(
     telegram,
     `webpage-${source?.uniqueFileId ?? message.id}`,
@@ -333,7 +336,16 @@ function WebPageView({ message, telegram }: { message: Message; telegram: Telefa
       rel="noopener noreferrer"
       class="block max-w-sm overflow-hidden rounded-lg border border-base-300 bg-base-200/40 text-base-content no-underline"
     >
-      {image.data && <img class="max-h-48 w-full object-cover" src={image.data} alt="" decoding="async" />}
+      {source && imageAspectRatio ? (
+        <span
+          class="block max-h-48 w-full overflow-hidden bg-base-100"
+          style={{ aspectRatio: String(imageAspectRatio) }}
+        >
+          {image.data && <img class="size-full object-cover" src={image.data} alt="" decoding="async" />}
+        </span>
+      ) : image.data && (
+        <img class="max-h-48 w-full object-cover" src={image.data} alt="" decoding="async" />
+      )}
       <span class="block px-3 py-2">
         <span class="block truncate text-xs text-primary">{preview.siteName || preview.displayUrl}</span>
         {preview.title && <strong class="mt-0.5 block text-sm">{preview.title}</strong>}
